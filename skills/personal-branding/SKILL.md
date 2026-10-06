@@ -35,6 +35,11 @@ Skill operasional untuk membangun dan merawat personal brand Seti sebagai develo
    - Salah: "Passionate developer yang suka coding dan belajar hal baru."
 3. Panjang maksimal 15 kata. Harus bisa ditempel mentah ke headline LinkedIn dan bio X tanpa diedit.
 4. Kriteria lolos: orang asing paham dalam 5 detik Seti itu siapa dan kenapa relevan. Kalau masih butuh penjelasan, tulis ulang.
+5. Varian bila formula utama tidak pas:
+   - Padat (gaya headline): `[Role] | [niche] | [bukti]` — contoh: "AI Automation Developer | AI Agents & API Integration | Open Source Tooling".
+   - Naratif: `Saya membangun [jenis solusi] untuk [audiens] yang [masalah]` — contoh: "Saya membangun AI agents untuk tim operasional yang tenggelam di kerja repetitif."
+6. Bahasa: default Bahasa Indonesia. Jika target freelance/klien internasional, buat juga versi Inggris 1 baris yang maknanya setia dengan versi Indonesia (bukan positioning yang berbeda). Contoh EN: "AI automation developer helping Indonesian businesses cut ops costs with AI agents & API integrations."
+7. Checklist validasi sebelum dipakai: (a) maksimal 15 kata; (b) memuat ketiganya — audiens, hasil konkret, cara/stack khas; (c) lolos uji 5 detik oleh orang asing; (d) total bio X (positioning + bukti + CTA/link) tidak melebihi 160 karakter.
 
 ### 3.2 README profil GitHub
 
@@ -48,7 +53,38 @@ Struktur baku (urutan wajib):
 5. **Sedang dikerjakan / belajar**: 1-2 baris, konkret (misal: "Membangun dashboard multi-agent dengan Express + AI routing").
 6. **Kontak**: LinkedIn, X, email — hanya yang aktif.
 
-Aturan penulisan: tanpa emoji berlebihan (maksimal 1 per baris section), tanpa GIF animasi, tanpa kalimat klise ("Welcome to my profile", "Passionate about...").
+**Aturan penulisan:** tanpa emoji berlebihan (maksimal 1 per baris section), tanpa GIF animasi, tanpa kalimat klise ("Welcome to my profile", "Passionate about..."). Bahasa README: pilih satu — Inggris bila target freelance/klien internasional, Indonesia bila target lokal; boleh bilingual dengan pola konsisten (satu bahasa per section, jangan campur acak dalam satu section).
+
+**Contoh isi per section** (ganti semua dengan data nyata Seti — contoh di bawah hanya menunjukkan pola dan sintaks yang benar):
+
+```markdown
+# Halo, saya Seti 👋
+**AI automation developer** yang membantu bisnis Indonesia pangkas biaya operasional lewat AI agents & integrasi API.
+📍 Indonesia (WIB, UTC+7)
+
+## 🛠️ Stack
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-339933?logo=nodedotjs&logoColor=white)
+```
+
+Pola badge: `https://img.shields.io/badge/<Nama>-<HexWarna>?logo=<logo>&logoColor=white` (maksimal 10 badge, hanya stack yang terbukti dipakai di repo publik).
+
+```markdown
+## 🚀 Proyek Unggulan
+- **[hermes-agent-dashboard](https://github.com/sktyawan/hermes-agent-dashboard)** — Dashboard orkestrasi 10 AI agent dengan routing model otomatis; memangkas eksekusi task operasional berulang dari hitungan jam menjadi menit. Stack: Node.js, Express, REST API.
+- **[jarwo-relay](https://github.com/sktyawan/jarwo-relay)** — Relay Telegram dua arah berjadwal tiap 5 menit untuk bot pribadi; pesan penting tersampaikan tanpa spam. Stack: Python, Telegram Bot API.
+
+## 📊 Statistik
+![Statistik GitHub Seti](https://github-readme-stats.vercel.app/api?username=sktyawan&show_icons=true)
+
+## 🔭 Sedang Dikerjakan
+Membangun pipeline auto-retry deploy workload AI di Oracle Cloud (Ampere 4 OCPU/24GB).
+
+## 📫 Kontak
+[LinkedIn](https://linkedin.com/in/USERNAME) · [X](https://x.com/USERNAME) · [email@aktif.com](mailto:email@aktif.com)
+```
+
+**Aturan data (wajib):** jangan mengarang nama repo, angka, atau link. Bila daftar repo Seti belum diketahui saat mengerjakan task, tulis slot proyek sebagai `- **[nama-repo]** — [TBD — isi setelah cek repo Seti]` dan minta daftar repo ke Seti sebelum final. Username/link contoh di atas wajib diganti data asli di output final — jangan biarkan placeholder lolos.
 
 ### 3.3 Pinned repositories
 
@@ -60,6 +96,8 @@ Aturan penulisan: tanpa emoji berlebihan (maksimal 1 per baris section), tanpa G
    - **Bukti skill yang dicari pasar** (API, AI integration, deployment, testing)
 3. Repo yang skornya rendah tapi penting: poles dulu (tulis README minimal: apa ini, cara jalan, 1 screenshot) baru pin. Jangan pin repo kosong/tanpa README.
 4. Review ulang tiap 3 bulan atau tiap ada proyek baru yang selesai.
+5. Seri skor: menangkan yang paling relevan dengan positioning, lalu yang commit-nya paling baru.
+6. Jangan pin fork kecuali Seti kontributor aktif di fork itu (commit-nya terlihat di contribution graph fork tersebut).
 
 ### 3.4 Konsistensi identitas lintas platform
 
@@ -92,16 +130,15 @@ Jika ada yang tidak selaras, laporkan sebagai daftar perbaikan konkret ("ganti X
 
 **Jam posting** (WIB, untuk audiens Indonesia): Selasa–Kamis, 07:30–09:00 atau 12:00–13:00 atau 19:00–21:00. Hindari Senin pagi dan Jumat sore. Posting 1x per hari maksimal — kualitas mengalahkan kuantitas.
 
-**Template kalender mingguan** (output berupa tabel siap jalankan):
+**Template kalender mingguan** (output berupa tabel siap jalankan — kolom Hook dan CTA wajib terisi kalimat jadi; dilarang mengeluarkan sel "..." kosong):
 
-| Hari | Pilar | Format | Topik kerja |
-|---|---|---|---|
-| Selasa | Build in public | Teks | ... |
-| Rabu | Insight teknis | Carousel | ... |
-| Kamis | Opini | Teks | ... |
-| (opsional) Sabtu | Personal/milestone | Teks | ... |
+| Hari | Pilar | Format | Topik spesifik | Hook draf (1 kalimat) | CTA |
+|---|---|---|---|---|---|
+| Selasa | Build in public | Teks | Relay Telegram 5 menit untuk bot pribadi: kenapa pindah dari polling ke webhook | "Bot Telegram saya delay 5 menit. Ternyata masalahnya bukan di kode." | "Kalian pakai polling atau webhook untuk bot? Kenapa?" |
+| Rabu | Insight teknis | Carousel | Checklist audit security: 6 pola celah yang saya temukan di repo sendiri | "Saya audit repo sendiri dan nemu 6 lubang kritis. Ini checklist-nya:" | "Pernah nemu yang mana di codebase kalian?" |
+| Kamis | Opini | Teks | Agent AI harus nurut, bukan kreatif | "AI agent saya ngerusak kerjaan karena terlalu kreatif. Solusinya: kontrak kerja yang ketat." | "Setuju agent dibatasi ketat, atau dibiarkan eksplor?" |
 
-Setiap baris kalender wajib berisi: topik spesifik (bukan "tentang AI" tapi "kenapa saya pindah dari polling ke webhook untuk relay Telegram"), hook draf 1 kalimat, dan CTA (pertanyaan penutup yang mengundang komentar).
+Topik contoh di atas ilustratif — ganti dengan proyek/pengalaman nyata Seti yang sedang berjalan (misal: dashboard multi-agent, relay Telegram, setup VPS). Setiap baris kalender wajib berisi: topik spesifik (bukan "tentang AI"), hook draf 1 kalimat, dan CTA berupa pertanyaan penutup yang mengundang komentar. Baris Sabtu (personal/milestone) opsional, maksimal 1 per 2 minggu.
 
 **Aturan konten LinkedIn:**
 
@@ -131,6 +168,11 @@ Setiap baris kalender wajib berisi: topik spesifik (bukan "tentang AI" tapi "ken
 3. Tweet terakhir = ringkasan + CTA (follow untuk konten sejenis / reply dengan pengalaman).
 4. Panjang ideal: 5-8 tweet. Setiap tweet maksimal 240 karakter agar tidak terpotong.
 5. Topik thread yang bekerja: breakdown proyek nyata, "yang saya pelajari dari X", perbandingan tools berdasarkan pengalaman pakai, kesalahan mahal.
+
+**Contoh hook tweet 1** (pola siap pakai — ganti isi dengan pengalaman nyata Seti, jangan mengarang angka):
+- "Saya nemu 6 lubang security kritis pas audit repo sendiri. Ini yang paling sering kelewat 🧵"
+- "Bot Telegram saya delay 5 menit. Ternyata masalahnya bukan di kode — ini yang saya ubah 🧵"
+- "Unpopular opinion: AI agent yang bagus itu yang nurut, bukan yang kreatif."
 
 **Engagement loop mingguan:**
 
@@ -164,3 +206,6 @@ Setiap baris kalender wajib berisi: topik spesifik (bukan "tentang AI" tapi "ken
 - Jangan mengubah gaya bahasa Seti menjadi kaku/formal korporat — pertahankan nada santai, to-the-point, Bahasa Indonesia campur istilah teknis Inggris bila natural.
 - Jangan membuat akun palsu, memalsukan testimoni, atau mengklaim proyek orang lain sebagai milik Seti.
 - Jangan menjanjikan hasil pertumbuhan ("dijamin 10K followers sebulan") — berikan mekanisme dan metrik ukur, bukan janji angka.
+- Jangan mengarang nama repo, angka statistik, link, atau testimoni — data yang belum diketahui ditulis `[TBD]` dan ditanyakan ke Seti; jangan biarkan placeholder lolos ke output final.
+- Jangan pin fork tanpa kontribusi nyata Seti di fork tersebut.
+- Jangan campur Bahasa Indonesia dan Inggris secara acak dalam satu section README — pilih satu bahasa per section dengan pola yang konsisten.

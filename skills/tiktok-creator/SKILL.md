@@ -47,12 +47,21 @@ Hook adalah 3 detik pertama video. Aturannya: penonton memutuskan lanjut atau sc
 - **Kesalahan umum:** "Kamu mungkin melakukan ini salah selama ini." — memancing self-check.
 - **Cerita terbuka:** "Kemarin aku kehilangan [sesuatu] gara-gara ini..." — loop cerita yang menuntut penyelesaian.
 
+**Langkah adaptasi niche (wajib setelah pilih pola):** suntikkan objek konkret dari niche ke dalam hook — nama fitur, angka nyata, atau situasi kerja audiens. "Kamu mungkin melakukan ini salah selama ini" itu generik; "Kamu mungkin pakai VLOOKUP salah selama ini" itu hook. Uji generik: kalau hook-mu bisa ditempel ke niche lain tanpa diubah satu kata pun, tulis ulang. Minimal satu dari tiga lapis hook (visual, teks, atau audio pembuka) harus menyebut objek konkret niche.
+
+**Uji baca 3 detik (wajib sebelum skor):** bacakan teks on-screen + kalimat pembuka keras-keras sambil membayangkan frame visualnya. Total harus selesai dalam 3 detik. Kalau terengah-engah atau teks tidak sempat terbaca utuh, pangkas kata — bukan dipercepat. Hook yang gagal uji ini tidak boleh diberi skor di atas 2 untuk kejelasan janji.
+
 **Cara menguji 3 varian hook per video:**
 
 1. Tulis 3 hook berbeda dari pola berbeda (misal: satu pertanyaan, satu pernyataan berani, satu preview hasil) untuk SATU isi video yang sama.
-2. Nilai tiap hook dengan skor 1–5 pada tiga kriteria: (a) kejelasan janji — apakah penonton tahu apa yang didapat; (b) ketegangan — apakah ada alasan emosional untuk lanjut; (c) relevansi niche — apakah tepat menyasar audiens target.
-3. Pilih skor tertinggi sebagai hook utama. Dua lainnya disimpan sebagai varian untuk repost atau versi ulang 7–14 hari kemudian.
-4. Setelah video tayang, bandingkan retention detik 0–3 di analytics: hook yang retention-nya di bawah 60% diganti polanya di video berikutnya, bukan diulang.
+2. Jalankan dulu uji baca 3 detik dan uji generik di atas. Hook yang gagal salah satunya langsung didiskualifikasi — tidak ikut diskor.
+3. Nilai hook yang lolos dengan skor 1–5 memakai jangkar ini (bukan perasaan):
+   - **Kejelasan janji:** 5 = penonton bisa mengulang janji video dalam satu kalimat setelah 3 detik ("aku akan belajar SUMIF"); 3 = tahu topiknya tapi tidak tahu dapat apa; 1 = tidak tahu video ini tentang apa.
+   - **Ketegangan:** 5 = ada taruhan emosional konkret (rugi waktu, malu, ketinggalan); 3 = penasaran ringan tanpa taruhan; 1 = datar, tidak ada alasan emosional untuk lanjut.
+   - **Relevansi niche:** 5 = hanya masuk akal untuk audiens target niche ini; 3 = relevan tapi bisa untuk niche sebelah; 1 = generik, cocok untuk siapa saja.
+   - Aturan keras: hook yang total skornya < 10 tidak boleh jadi hook utama, tulis ulang.
+4. Pilih skor tertinggi sebagai hook utama. Dua lainnya disimpan sebagai varian untuk repost atau versi ulang 7–14 hari kemudian.
+5. Setelah video tayang, bandingkan retention detik 0–3 di analytics: hook yang retention-nya di bawah 60% diganti polanya di video berikutnya, bukan diulang.
 
 ### 3.2 Riset audio trending
 
@@ -69,6 +78,26 @@ Audio adalah setengah dari distribusi TikTok: memakai audio yang sedang naik mem
 1. **Growth curve naik.** Jumlah pemakaian bertambah dalam 7 hari terakhir, bukan sudah mencapai puncak berminggu-minggu lalu. Audio yang sudah lewat puncak = kamu terlambat, efek dorongannya kecil.
 2. **Relevansi niche.** Audio dipakai oleh kreator di niche yang sama atau berdekatan, bukan hanya oleh niche yang jauh berbeda. Audio dance viral belum tentu cocok untuk konten edukasi — kecuali kamu mengadaptasi formatnya.
 3. **Kecocokan energi.** Tempo dan mood audio cocok dengan isi video. Konten tegang + audio ceria = penonton bingung dan skip.
+
+**Aturan jujur saat tidak bisa verifikasi (wajib):** kamu TIDAK BOLEH mengarang nama lagu/audio trending yang tidak benar-benar kamu cek. Kalau riset live tidak bisa dilakukan saat itu, rekomendasi audio ditulis dalam format ini — tanpa nama lagu palsu:
+
+```
+RISET AUDIO TANGGAL: [YYYY-MM-DD — tanggal kamu benar-benar cek, bukan hari ini kalau tidak cek]
+QUERY PENCARIAN TIKTOK: [kata persis yang diketik di kolom Discover/Search, mis. "dj viral tiktok november" atau nama tren yang terlihat]
+PROFIL AUDIO TARGET: tempo [cepat/sedang/pelan], mood [tegang/ceria/fokus], vokal/instrumental, potong di [drop/lirik kunci/intro], dipakai sebagai [background 20–30% di bawah voice-over / audio utama]
+KANDIDAT: [1–2 nama audio HANYA jika benar-benar terlihat di Creative Center/FYP saat riset, beserta jumlah video pemakainya]
+```
+
+Alasannya sederhana: nama lagu karangan tidak bisa diklik, tidak bisa dicari, dan bikin kreator kehilangan waktu. Query pencarian + profil audio selalu bisa dieksekusi.
+
+**Peta jenis audio per format konten** (dipakai saat memilih profil audio target):
+
+- **Tutorial screen-recording + voice-over** (mis. tips Excel): audio trending sebagai background 20–30% di bawah narasi, tempo sedang, instrumental atau vokal tidak dominan agar tidak berebut perhatian dengan penjelasan.
+- **Talking head cepat / tips kilat:** audio upbeat dengan drop yang jelas; potong tepat di drop untuk sinkron dengan momen "reveal" jawaban.
+- **Cerita / storytelling:** audio mellow atau sound effect tegang di 3 detik pertama saja, lalu turun — emosi dibawa narasi, bukan musik.
+- **Konten tanpa narasi (visual-only):** audio trending sebagai audio utama 100% — di sini pemilihan lagu adalah hook-nya, jadi kriteria growth curve paling ketat.
+
+**Umur rekomendasi:** tren audio berumur hari, bukan minggu. Kalau riset audiomu lebih tua dari 3 hari saat video mau diposting, cek ulang halaman audio sebelum pakai: jumlah video pemakai masih tumbuh = aman, stagnan = ganti.
 
 **Cara pakai audio tanpa terlihat ikut-ikutan:**
 
@@ -135,7 +164,12 @@ NASKAH DETIK-PER-DETIK:
 15–25 : [isi bagian 2 + bayar janji]
 25–30 : [penutup + loop ke awal / CTA]
 
-AUDIO: [nama audio trending + alasan memilih: growth curve, relevansi, energi]
+AUDIO:
+  Riset tanggal: [YYYY-MM-DD]
+  Query pencarian TikTok: [kata persis untuk kolom Discover/Search]
+  Profil: [tempo, mood, vokal/instrumental, titik potong, peran: background/utama + volume]
+  Kandidat terverifikasi: [nama audio + jumlah pemakai — HANYA jika benar-benar dicek; kalau tidak ada, tulis "belum terverifikasi, pakai query di atas"]
+  Alasan: [growth curve, relevansi niche, kecocokan energi]
 CAPTION: [1–2 kalimat + 1 pertanyaan pemancing komentar]
 HASHTAG: [3–5 hashtag: 2 niche spesifik, 1–2 menengah, 1 luas]
 JADWAL POSTING: [hari, jam WIB, alasan slot]
@@ -166,7 +200,12 @@ NASKAH DETIK-PER-DETIK:
 15–25 : Isi: jam 5 sore pedagang obral lauk sisa dagangan, bisa dapat 2–3 macam lauk 10 ribu; contoh belanjaan nyata.
 25–30 : Penutup: "15 ribu, makan enak, dompet aman." + loop: kembali ke visual uang 15 ribu + "Follow buat trik kos lainnya."
 
-AUDIO: [audio upbeat trending minggu ini, mis. potongan lagu viral FYP] — growth curve naik 7 hari terakhir, dipakai kreator lifestyle/edukasi, energi cocok dengan tone video yang cepat.
+AUDIO:
+  Riset tanggal: [tanggal cek Creative Center/FYP]
+  Query pencarian TikTok: "sound viral edukasi upbeat"
+  Profil: tempo sedang-cepat, mood fokus/ceria, instrumental atau vokal tidak dominan, potong di bagian paling dikenali, sebagai background 20–30% di bawah voice-over
+  Kandidat terverifikasi: [nama audio + jumlah pemakai — hanya jika benar-benar dicek]
+  Alasan: growth curve naik 7 hari terakhir, dipakai kreator edukasi/lifestyle, energi cocok dengan pace video yang cepat.
 CAPTION: "Siapa yang baru tahu trik pasar jam 5 sore? 🤯 Kamu biasanya belanja jam berapa?"
 HASHTAG: #anakkos #hematanakkos #tipshemat #lifehackindonesia #fyp
 JADWAL POSTING: Rabu, 19.30 WIB — prime time malam, audiens anak kos online setelah kuliah/kerja.
@@ -186,3 +225,7 @@ Hal yang TIDAK boleh dilakukan saat memakai skill ini:
 8. **Jangan mengubah lebih dari 2 variabel konten sekaligus** saat iterasi — kalau hook, audio, durasi, dan jam posting diganti bersamaan, tidak ada yang bisa dipelajari dari hasilnya.
 9. **Jangan membuat hook clickbait yang tidak dibayar isi video** — janji hook harus ditepati sebelum video selesai, kalau tidak retention anjlok dan akun kehilangan kepercayaan algoritma.
 10. **Jangan memposting lebih dari 3 video sehari atau dengan jeda kurang dari 2 jam** — video saling memakan distribusi dan data analytics jadi tidak terbaca.
+11. **Jangan mengarang nama lagu/audio trending yang tidak terverifikasi.** Kalau tidak benar-benar cek Creative Center/FYP, tulis tanggal riset + query pencarian persis + profil audio target — jangan tulis "misalnya lagu viral minggu ini".
+12. **Jangan memberi skor hook tanpa uji baca 3 detik dan jangkar skor.** Skor tanpa kalibrasi hanya hiasan: hook yang gagal uji baca atau total skor < 10 tidak boleh jadi hook utama.
+13. **Jangan menulis hook yang generik** — kalau hook-mu bisa ditempel ke niche lain tanpa diubah satu kata pun, tulis ulang dengan objek konkret (nama fitur, angka, situasi kerja audiens).
+14. **Jangan memakai rekomendasi audio yang risetnya lebih tua dari 3 hari tanpa cek ulang** — tren audio basi = dorongan distribusi hilang.
