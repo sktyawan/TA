@@ -29,15 +29,19 @@ Skill operasional untuk Sari, HR Admin Agent. Menangani validasi data karyawan, 
 
 ### 3.1 Validasi NIK 16 digit
 
-Jalankan cek ini berurutan; satu gagal = NIK ditandai TIDAK VALID dan tidak dilanjutkan ke proses berikutnya.
+Jalankan cek ini berurutan; satu gagal = NIK ditandai TIDAK VALID dan cek berikutnya di 3.1 dihentikan (cek nama di 3.2 dan BPJS di 3.3 tetap dijalankan — satu baris bisa punya lebih dari satu masalah, semuanya harus tercatat).
 
-1. **Panjang & numerik**: NIK harus tepat 16 karakter dan semuanya digit (0–9). Tolak jika ada huruf, spasi, tanda hubung, atau panjang ≠ 16.
-2. **Kode wilayah (digit 1–6)**: 2 digit pertama = kode provinsi, 2 digit berikutnya = kode kab/kota, 2 digit berikutnya = kode kecamatan. Cocokkan dengan daftar kode wilayah Kemendagri yang berlaku. Jika kode tidak dikenal, tandai untuk verifikasi manual ke Dukcapil/HR.
-3. **Tanggal lahir terkode (digit 7–12, format DDMMYY)**:
-   - Ambil 2 digit pertama sebagai tanggal (DD). Jika DD > 40, itu karyawan perempuan — kurangi 40 untuk dapat tanggal lahir sebenarnya (contoh: DD=55 → perempuan, tanggal 15).
-   - Validasi: DD (setelah dikurangi 40 bila perlu) 01–31, MM 01–12, YY masuk akal (tidak menghasilkan umur < 15 tahun atau > 100 tahun dari tahun berjalan).
+1. **Panjang & numerik**: NIK harus tepat 16 karakter dan semuanya digit (0–9). Tolak jika ada huruf, spasi, tanda hubung, atau panjang ≠ 16. Tulis selisihnya secara eksplisit, contoh: "panjang 15 digit (kurang 1)" — jangan menebak digit mana yang hilang.
+2. **Duplikat**: pastikan NIK belum dipakai baris lain dalam batch yang sama. Duplikat = TIDAK VALID dengan detail "duplikat NIK baris <nomor>"; jangan memilih salah satunya sendiri — minta HR memastikan mana yang benar.
+3. **Kode wilayah (digit 1–6)**: 2 digit pertama = kode provinsi, 2 digit berikutnya = kode kab/kota, 2 digit berikutnya = kode kecamatan. Cocokkan 2 digit pertama dengan tabel provinsi berikut:
+   11 Aceh | 12 Sumatera Utara | 13 Sumatera Barat | 14 Riau | 15 Jambi | 16 Sumatera Selatan | 17 Bengkulu | 18 Lampung | 19 Kep. Bangka Belitung | 21 Kep. Riau | 31 DKI Jakarta | 32 Jawa Barat | 33 Jawa Tengah | 34 DI Yogyakarta | 35 Jawa Timur | 36 Banten | 51 Bali | 52 NTB | 53 NTT | 61 Kalimantan Barat | 62 Kalimantan Tengah | 63 Kalimantan Selatan | 64 Kalimantan Timur | 65 Kalimantan Utara | 71 Sulawesi Utara | 72 Sulawesi Tengah | 73 Sulawesi Selatan | 74 Sulawesi Tenggara | 75 Gorontalo | 76 Sulawesi Barat | 81 Maluku | 82 Maluku Utara | 91 Papua Barat | 92 Papua | 93 Papua Selatan | 94 Papua Tengah | 95 Papua Pegunungan | 96 Papua Barat Daya
+   Jika kode tidak ada di tabel: JANGAN ditolak otomatis — tandai "KODE WILAYAH PERLU VERIFIKASI MANUAL", lanjutkan cek lain, dan minta HR/Dukcapil memastikan (kode baru hasil pemekaran wilayah memang belum tentu ada di daftar lama).
+4. **Tanggal lahir terkode (digit 7–12, format DDMMYY)**:
+   - DD 01–31 = laki-laki; DD 41–71 = perempuan (kurangi 40 untuk tanggal sebenarnya, contoh: DD=55 → perempuan, tanggal 15). DD 32–40 atau 72–99 = TIDAK VALID.
+   - Validasi: MM 01–12; tanggal harus valid menurut kalender (tidak ada 31 Februari; 29 Februari hanya di tahun kabisat).
+   - Tentukan abad YY dengan aturan pivot: jika YY ≤ 2 digit terakhir tahun berjalan → 20YY, selain itu → 19YY. Contoh tahun 2026: YY=90 → 1990; YY=20 → 2020. Umur hasil harus 15–100 tahun; di luar rentang itu = TIDAK VALID.
    - Cross-check dengan tanggal lahir yang tercatat di data karyawan; jika berbeda, tandai mismatch.
-4. **Digit 13–16** = nomor urut registrasi; pastikan numerik saja, tidak ada aturan validasi khusus selain itu.
+5. **Digit 13–16** = nomor urut registrasi; pastikan numerik saja, tidak ada aturan validasi khusus selain itu.
 
 **Format output validasi NIK** (satu baris per karyawan):
 `NIK | Nama | Status (VALID/TIDAK VALID) | Detail masalah (jika ada) | Jenis kelamin terdeteksi (L/P) | Tanggal lahir terdeteksi (DD-MM-YYYY)`
@@ -49,8 +53,13 @@ Jalankan cek ini berurutan; satu gagal = NIK ditandai TIDAK VALID dan tidak dila
 3. Kapitalisasi konsisten: setiap kata diawali huruf kapital, sisanya huruf kecil (Title Case), kecuali ada instruksi khusus (misalnya gelar atau nama yang memang memakai kapitalisasi tertentu sesuai KTP — ikuti KTP).
 4. Nama tidak boleh kosong dan minimal 3 karakter.
 5. Jika nama di data internal berbeda dengan nama di KTP/BPJS, catat sebagai mismatch dan minta konfirmasi: yang dipakai acuan adalah nama sesuai KTP.
+6. Nama yang mengandung simbol yang jelas salah ketik (mis. `@`, `#`, `*` menempel di ujung nama seperti "Dian Puspita@") ditandai TIDAK VALID dengan detail "kemungkinan salah ketik". JANGAN memperbaikinya sendiri dengan menghapus simbolnya — minta konfirmasi nama yang benar sesuai KTP.
 
 ### 3.3 Validasi BPJS via Edabu & SIPP Online
+
+**Aturan label & mode offline:**
+- Jika kolom hanya bertuliskan "No BPJS" tanpa keterangan: perlakukan sebagai **BPJS Kesehatan (13 digit)**. Jika tertulis KPJ/Jamsostek/BPJS TK: perlakukan sebagai **BPJS Ketenagakerjaan (11 digit)**. Jangan menebak sebaliknya; jika ragu, tanyakan ke HR sebelum validasi.
+- Tanpa akses Edabu/SIPP Online, yang bisa divalidasi hanya FORMAT nomor. Tulis status "BELUM TERSINKRON (cek format saja)" — jangan pernah mengklaim SINKRON tanpa membuka sistemnya langsung.
 
 **BPJS Kesehatan (Edabu):**
 1. Format nomor kartu: 13 digit numerik.
@@ -120,6 +129,29 @@ Aturan status:
 - Item yang melewati tenggat otomatis berstatus `TERLAMBAT` (tandai merah) dan wajib dicantumkan rencana penyelesaian + tanggal baru.
 - Checklist bulan berjalan tidak boleh ditutup sebelum semua item berstatus `Sudah` atau `TERLAMBAT` dengan rencana tindak lanjut.
 
+### 3.6 Keputusan per baris & format laporan batch
+
+Satu baris data dinyatakan **VALID** hanya jika NIK, nama, DAN nomor BPJS semuanya lolos. Satu saja gagal = kesimpulan baris **TIDAK VALID**, dengan tindakan wajib sesuai tabel:
+
+| Masalah | Tindakan wajib |
+|---|---|
+| NIK TIDAK VALID (panjang/format/tanggal/duplikat) | BLOKIR: jangan daftarkan ke BPJS; minta NIK yang benar ke karyawan/HR |
+| Nama TIDAK VALID (simbol/angka/kemungkinan salah ketik) | BLOKIR: minta nama sesuai KTP; jangan "diperbaiki" sendiri |
+| No. BPJS format salah | Minta nomor kartu yang benar; jangan daftarkan dengan nomor salah |
+| Kode wilayah tidak dikenal | Lanjutkan cek lain, tandai PERLU VERIFIKASI MANUAL ke Dukcapil/HR |
+| Tanggal lahir di NIK ≠ tanggal lahir tercatat | Catat mismatch, minta konfirmasi dokumen pendukung |
+
+Setiap laporan validasi batch WAJIB ditutup dengan blok rekap ini:
+
+```
+LAPORAN VALIDASI DATA KARYAWAN — <tanggal> — <N> baris
+<no>. <NIK> | <Nama> | NIK: <VALID / TIDAK VALID + detail> | Nama: <VALID / TIDAK VALID + detail> | BPJS: <VALID / TIDAK VALID + detail> | <L/P, DD-MM-YYYY terdeteksi, atau -> | TINDAKAN: <...>
+
+REKAP: <N> baris diproses — <A> VALID, <B> TIDAK VALID (<b1> masalah NIK, <b2> masalah nama, <b3> masalah BPJS).
+DAFTAR TINDAK LANJUT (urut prioritas):
+1. <masalah> — PIC: <nama/jabatan> — tenggat <tanggal>
+```
+
 ## 4. Contoh singkat
 
 **Skenario:** HR menyerahkan 3 data karyawan baru untuk divalidasi sebelum didaftarkan ke BPJS.
@@ -142,6 +174,22 @@ HASIL VALIDASI NIK — 3 karyawan baru (01-10-2026)
 3. 32730A1001850003 | Budi Santoso | TIDAK VALID | mengandung karakter non-digit (huruf A) | - | - → MINTA NIK YANG BENAR ke karyawan/HR, jangan daftarkan ke BPJS
 ```
 
+**Contoh laporan batch (5 baris, memakai format 3.6):**
+
+```
+LAPORAN VALIDASI DATA KARYAWAN — 06-10-2026 — 5 baris
+1. 3273051203850001 | Budi Hartono | NIK: VALID | Nama: VALID | BPJS: VALID | L, 12-03-1985 | TINDAKAN: lanjut pendaftaran BPJS (tenggat 30 hari kerja)
+2. 3273065507880002 | Sari Wulandari | NIK: VALID | Nama: VALID | BPJS: VALID | P, 15-07-1988 | TINDAKAN: lanjut pendaftaran BPJS
+3. 317401250885001 | Toni Firmansyah | NIK: TIDAK VALID (panjang 15 digit, kurang 1) | Nama: VALID | BPJS: VALID | - | TINDAKAN: BLOKIR — minta NIK 16 digit yang benar, jangan daftarkan ke BPJS
+4. 337402480390002 | Wulan Dari | NIK: TIDAK VALID (panjang 15 digit, kurang 1) | Nama: VALID | BPJS: VALID | - | TINDAKAN: BLOKIR — minta NIK yang benar
+5. 3578064205920017 | Dian Puspita@ | NIK: VALID | Nama: TIDAK VALID (mengandung simbol @, kemungkinan salah ketik) | BPJS: VALID | P, 02-05-1992 | TINDAKAN: BLOKIR — minta nama sesuai KTP, jangan hapus simbolnya sendiri
+
+REKAP: 5 baris diproses — 2 VALID, 3 TIDAK VALID (2 masalah NIK, 1 masalah nama).
+DAFTAR TINDAK LANJUT (urut prioritas):
+1. Minta NIK benar Toni Firmansyah & Wulan Dari — PIC: HR — tenggat 09-10-2026
+2. Konfirmasi nama Dian Puspita sesuai KTP — PIC: HR — tenggat 09-10-2026
+```
+
 ## 5. Anti-pattern
 
 - **Jangan mendaftarkan karyawan ke BPJS** sebelum NIK dan namanya lolos validasi — data salah di hulu menimbulkan mismatch berantai.
@@ -154,3 +202,7 @@ HASIL VALIDASI NIK — 3 karyawan baru (01-10-2026)
 - **Jangan melewatkan peringatan kontrak PKWT** — kontrak yang kedaluwarsa tanpa perpanjangan/PKWTT berisiko sengketa hukum; eskalasi sejak H-30.
 - **Jangan memberikan nasihat hukum atau pajak final** — untuk kasus sengketa, PHK, atau interpretasi regulasi yang kompleks, susun datanya rapi lalu arahkan ke konsultan hukum/pajak atau HRD senior.
 - **Jangan mengarang nomor BPJS, NIK, atau tanggal** — jika data tidak tersedia, tulis `DATA BELUM ADA` dan minta dilengkapi, jangan diisi asal.
+- **Jangan menebak digit NIK yang kurang/kelebihan** — NIK 15 digit bukan "tinggal tambah 0 di belakang"; minta yang benar ke pemilik data.
+- **Jangan menolak NIK hanya karena kode wilayahnya tidak dikenal** — kode pemekaran wilayah baru memang belum tentu ada di daftar; verifikasi manual dulu.
+- **Jangan menebak arti label "No BPJS"** — default-nya BPJS Kesehatan (13 digit) kecuali tertulis KPJ/TK; kalau ragu, tanya HR sebelum validasi.
+- **Jangan mengklaim status SINKRON** tanpa benar-benar membuka Edabu/SIPP Online — validasi format saja hasilnya "BELUM TERSINKRON (cek format saja)".

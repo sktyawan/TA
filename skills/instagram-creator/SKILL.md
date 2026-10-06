@@ -11,7 +11,7 @@ Skill ini menghasilkan aset konten Instagram yang siap posting:
 
 - **Hook Reels 0–3 detik**: kalimat pembuka video (spoken maupun text overlay) yang menahan penonton dari swipe. Target: retention ≥ 3 detik di atas 70% audience.
 - **Copywriting caption**: struktur lengkap hook → value → CTA, ditulis sesuai format postingannya.
-- **Copywriting carousel**: teks per slide — cover, problem, solusi bertahap, CTA — lengkap dengan batas kata per slide dan kalimat transisi antar slide.
+- **Copywriting carousel**: teks per slide — cover, problem, solusi bertahap, CTA — lengkap dengan batas kata per slide, kalimat transisi antar slide, dan arahan visual per slide. Termasuk varian listicle untuk topik "N kesalahan / N cara / N tips".
 - **Strategi hashtag**: set hashtag hasil riset (mix besar/sedang/niche), jumlah ideal, dan penempatan.
 - **Audience targeting**: membaca insight audience untuk menentukan topik, bahasa, dan jam posting konten berikutnya.
 
@@ -68,6 +68,8 @@ Kriteria hook yang lolos:
 
 Hook ditulis 2 versi: satu sebagai **text overlay** (maks 8 kata, huruf besar semua untuk keterbacaan) dan satu sebagai **kalimat spoken** (maks 15 kata, bahasa percakapan).
 
+**Khusus carousel** (tidak ada spoken): 2 varian hook = 2 varian headline cover, masing-masing maks 10 kata. Pada format output, tulis varian headline di kolom hook dan isi kolom spoken dengan `n/a`.
+
 ### 3.3. Struktur caption Reels
 
 Urutan wajib:
@@ -87,7 +89,8 @@ Panjang total caption: 50–120 kata. Lebih dari itu hanya jika carousel edukasi
 
 Carousel = 5–8 slide. Struktur wajib:
 
-- **Slide 1 — Cover**: 1 kalimat hook besar (maks 10 kata) + 1 sub-kalimat janji isi (maks 12 kata). Contoh: "5 Kesalahan Finansial di Usia 20-an" / "Nomor 3 paling sering kejadian. Save dulu."
+- **Slide 1 — Cover**: 1 kalimat hook besar (maks 10 kata) + 1 sub-kalimat janji isi (maks 12 kata). Contoh: "5 Kesalahan Finansial di Usia 20-an" / "Nomor 3 paling sering kejadian."
+- **Cover dilarang memuat CTA.** CTA hanya boleh ada di SATU tempat per postingan: slide terakhir ATAU caption — bukan di cover, dan bukan di dua-duanya (lihat anti-pattern #14).
 - **Slide 2 — Problem**: validasi masalah audience dalam 20–30 kata. Pakai "kamu", bukan "kita/kalian". Contoh: "Gaji habis sebelum tanggal 20? Kamu nggak sendirian — 7 dari 10 orang ngalamin ini."
 - **Slide 3–(n-1) — Solusi bertahap**: 1 poin per slide. Tiap slide = judul poin (maks 6 kata) + penjelasan (maks 35 kata) + 1 contoh konkret. Contoh konkret WAJIB ada — tanpa contoh, poin terasa teori.
 - **Slide terakhir — CTA**: 1 kalimat ajakan (maks 15 kata) + 1 kalimat penguat (misalnya "Follow @akunmu biar nggak ketinggalan part 2").
@@ -96,6 +99,31 @@ Aturan per slide:
 - Maksimal 40 kata per slide. Lebih dari itu = pecah jadi 2 slide.
 - Satu ide per slide. Jangan menumpuk 2 poin dalam 1 slide.
 - Kalimat transisi di akhir tiap slide (kecuali terakhir): "Geser →", "Lanjut 👉", atau kalimat penasaran seperti "Nah, yang nomor 3 ini jebakan..."
+
+### 3.4b. Varian listicle ("N kesalahan / N cara / N tips")
+
+Kalau topik berbentuk daftar bernomor (misalnya "5 kesalahan Excel"), pakai struktur ini — BUKAN struktur problem→solusi di 3.4:
+
+- **Slide 1 — Cover**: headline (maks 10 kata) + sub-janji (maks 12 kata). Sub-janji berfungsi ganda sebagai validasi masalah, jadi slide problem terpisah TIDAK dipakai.
+- **Slide 2 s/d (n-1) — Satu item per slide**: judul item (maks 6 kata) + penjelasan (maks 35 kata) + 1 contoh konkret WAJIB + kalimat transisi penasaran di akhir.
+- **Slide terakhir — Item terakhir + CTA mini**: item terakhir ditulis penuh, lalu 1 kalimat CTA (maks 10 kata) di bawahnya. CTA tetap SATU untuk seluruh postingan.
+
+**Aturan kapasitas** (penyebab kegagalan paling umum di carousel listicle):
+- Jumlah item ≤ jumlah slide − 1 (1 slot untuk cover; CTA menumpang di slide terakhir).
+- Kalau item melebihi kapasitas, JANGAN memadatkan 2 item ke 1 slide. Pilih salah satu dan tulis pilihanmu di CATATAN:
+  a. Tambah slide sampai 8 (batas maksimal carousel) — ini default.
+  b. Pangkas ke item terkuat saja, sisanya tulis di caption ("+ 2 kesalahan lain di caption 👇").
+  c. Jadikan seri: "Part 1" sekarang, sisanya postingan berikutnya.
+- Kalau CTA dipindah ke caption (opsi b), slide terakhir murni item terakhir tanpa CTA.
+
+### 3.4c. Arahan visual per slide
+
+Setiap slide WAJIB punya baris VISUAL dengan format: **[jenis] + [fokus highlight] + [komposisi]**.
+- **Jenis**: teks-besar / screenshot-crop / before-after / ilustrasi / foto. Pilih yang paling menjelaskan isi — topik tutorial teknis (Excel, aplikasi) wajib screenshot-crop, bukan teks-besar saja.
+- **Fokus**: SATU elemen yang di-highlight per slide (lingkari / panah / warna kontras). Contoh: "rumus =VLOOKUP(A2;Data!A:B;2;0), angka 0 dilingkari merah".
+- **Komposisi**: posisi teks vs visual. Contoh: "teks di atas 1/3, screenshot di bawah 2/3".
+- **Batasan teks di visual**: teks yang menempel di gambar ≤ 12 kata — visual bukan tempat paragraf. Copy panjang tetap di teks slide/caption.
+- **Konsistensi**: 1 palet warna + 1 font untuk seluruh carousel. Slide 1 paling kontras (misalnya background gelap, teks terang) agar berhenti di feed.
 
 ### 3.5. Strategi hashtag & riset
 
@@ -129,24 +157,28 @@ Setiap hasil kerja WAJIB mengikuti format ini:
 ```
 FORMAT: Reels / Carousel (X slide)
 TOPIK: [satu kalimat]
-AUDIENCE: [siapa, masalahnya apa]
+AUDIENCE: [siapa, masalahnya apa — tulis "asumsi default" bila tanpa data insight]
 PESAN KUNCI: [satu kalimat]
 
-HOOK A (text overlay): ...
-HOOK A (spoken): ...
-HOOK B (text overlay): ...
-HOOK B (spoken): ...
+HOOK A: ... (Reels: text overlay ≤8 kata + spoken ≤15 kata; carousel: headline cover varian A ≤10 kata, spoken = n/a)
+HOOK B: ... (varian kedua, pola hook berbeda dari A)
 
-[CAPTION / ISI SLIDE]
-...
+[Reels → CAPTION:]
+(baris 1-2: tulis ulang hook; value 3-6 baris; 1 baris CTA; hashtag setelah 1 baris kosong)
 
-CTA: [satu kalimat]
+[Carousel → per slide:]
+SLIDE N — [cover / item / CTA]:
+COPY: ...
+VISUAL: [jenis + fokus highlight + komposisi]
+TRANSISI: ... (tidak ada di slide terakhir)
 
-HASHTAG (set ke-N):
+CTA: [satu kalimat — SATU CTA per postingan: di slide terakhir ATAU caption, bukan dua-duanya]
+
+HASHTAG (set ke-N, N = 1/2/3 sesuai rotasi):
 #... #... ...
 
-JAM POSTING SARAN: ...
-CATATAN: [1 kalimat kenapa hook ini dipilih, opsional]
+JAM POSTING SARAN: ... (tulis "asumsi default" bila tanpa data insight)
+CATATAN: [pola hook yang dipakai; bila ada deviasi struktur — misal item dipindah ke caption — tulis alasannya di sini, wajib]
 ```
 
 ## 4. Contoh singkat
@@ -180,7 +212,7 @@ Save dulu, cek pengeluaranmu minggu ini. 👇
 CTA: Save dulu, praktekin nanti.
 
 HASHTAG (set 1):
-#anakkos #hematuang #tipsh hemat #keuanganmahasiswa #uangjajan #hiduphemat #mahasiswaindonesia #nabung #finansialpemula #budgeting
+#anakkos #hematuang #tipshemat #keuanganmahasiswa #uangjajan #hiduphemat #mahasiswaindonesia #nabung #finansialpemula #budgeting
 
 JAM POSTING SARAN: 19.30 WIB (mahasiswa aktif malam hari)
 CATATAN: Hook A dipilih karena angka spesifik + hasil; Hook B sebagai varian pola kesalahan umum.
@@ -201,3 +233,7 @@ Agent DILARANG melakukan hal-hal berikut saat memakai skill ini:
 9. **Bahasa kaku/formal untuk audience muda, atau slang berlebihan untuk audience profesional.** Sesuaikan register dengan umur dominan.
 10. **Menghasilkan konten untuk platform lain** (TikTok, YouTube, Threads) dengan dalih "sekalian". Itu di luar domain skill ini — tolak dan arahkan ke skill yang sesuai.
 11. **Output berupa saran umum tanpa hasil kerja konkret.** Setiap pemakaian skill ini harus menghasilkan hook/caption/slide/hashtag yang siap posting, bukan paragraf motivasi.
+12. **Menjejalkan 2 item listicle ke 1 slide** agar "muat". Kapasitas kurang → tambah slide, pangkas item, atau pindah ke caption/part 2 (lihat 3.4b).
+13. **Slide tanpa arahan visual.** Copy tanpa baris VISUAL = desainer menebak-nebak; setiap slide carousel wajib punya VISUAL (lihat 3.4c).
+14. **CTA ganda terselubung**: cover/caption bilang "save", slide akhir bilang "follow". Satu postingan = satu CTA di satu tempat.
+15. **Slide problem terpisah di carousel listicle pendek.** Sub-janji cover sudah memvalidasi masalah; slide problem terpisah hanya untuk carousel edukasi 6–8 slide non-listicle.
