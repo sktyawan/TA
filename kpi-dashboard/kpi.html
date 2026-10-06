@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KPI Dashboard — 10 Agent Hermes</title>
+<style>
+:root{--bg:#0f1420;--card:#1a2233;--line:#2a3550;--txt:#e8edf5;--mut:#8b98ad;--acc:#4f8cff;--ok:#35c48d;--warn:#f0a63c;--bad:#e5605e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:'Segoe UI',system-ui,sans-serif;padding:20px;max-width:1400px;margin:0 auto}
+h1{font-size:22px;margin-bottom:4px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:18px}
+.topbar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 18px;min-width:130px}
+.stat b{font-size:24px;display:block}
+.stat span{color:var(--mut);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card h3{font-size:16px}
+.card .role{color:var(--mut);font-size:12px;margin-bottom:10px}
+.act{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pill{background:#0f1420;border:1px solid var(--line);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--mut)}
+.pill b{color:var(--txt)}
+.kpi{margin-bottom:10px}
+.kpi .row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.kpi .row .t{color:var(--mut)}
+.bar{background:#0f1420;border-radius:6px;height:8px;overflow:hidden;margin-bottom:6px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:6px;transition:width .3s}
+.bar i.done{background:var(--ok)}
+.kpi .btns{display:flex;gap:6px}
+button{background:var(--acc);color:#fff;border:0;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
+button:hover{opacity:.85}
+.head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.err{background:#3a1d1d;border:1px solid var(--bad);border-radius:10px;padding:14px;margin-bottom:14px;font-size:13px}
+.note{color:var(--mut);font-size:12px;margin-top:16px}
+</style>
+</head>
+<body>
+<h1>📊 KPI Dashboard — 10 Agent Hermes</h1>
+<div class="sub">Aktivitas diambil live dari API dashboard. KPI manual dicatat per klik dan tersimpan di browser ini.</div>
+<div id="err"></div>
+<div class="head">
+  <div class="topbar" id="summary"></div>
+  <button onclick="load()">🔄 Refresh</button>
+</div>
+<div class="grid" id="grid"></div>
+<div class="note">Cara pasang: taruh file ini di folder <b>public/</b> dashboard (sejajar chat.html), lalu buka <b>http://localhost:5000/kpi.html</b>. Tidak perlu ubah server.js.</div>
+
+<script>
+// ===== Definisi KPI per agent (3 KPI + target bulanan) =====
+const KPI_DEF = {
+  "Sari":  [["Validasi BPJS selesai",200],["Baris data tervalidasi",5000],["Checklist compliance",1]],
+  "Dinda": [["Proposal terkirim",30],["Respons klien",5],["Side gig ditemukan",20]],
+  "Rina":  [["Konten LinkedIn",12],["Postingan X",20],["Koneksi baru",100]],
+  "Siti":  [["Kasus formula selesai",25],["Audit kualitas data",8],["Template dibuat",4]],
+  "Citra": [["Hook Reels dibuat",30],["Carousel selesai",12],["Set hashtag",12]],
+  "Maya":  [["Naskah video selesai",8],["Judul SEO dibuat",8],["Shorts repurpose",16]],
+  "Zahra": [["Hook 3-detik",40],["Riset audio trending",12],["Konsep video",16]],
+  "Dewi":  [["Storytelling selesai",12],["Postingan grup",20],["Cross-post platform",12]],
+  "Dira":  [["Task implementasi",20],["Endpoint API",30],["Bug diperbaiki",25]],
+  "Fitri": [["Konsep desain",12],["Komponen design system",30],["Brand asset",8]],
+};
+const store = {
+  get(){ try{return JSON.parse(localStorage.getItem('hermes_kpi')||'{}')}catch{return{}} },
+  set(v){ localStorage.setItem('hermes_kpi', JSON.stringify(v)) },
+};
+const kpiKey = (a,i)=> a+'|'+i;
+function kpiVal(a,i){ return store.get()[kpiKey(a,i)]||0 }
+function kpiAdd(a,i,d){
+  const s=store.get(), k=kpiKey(a,i);
+  s[k]=Math.max(0,(s[k]||0)+d); store.set(s); renderCards();
+}
+async function api(p){
+  const h={}; const t=localStorage.getItem('dash_token'); if(t) h['x-token']=t;
+  const r=await fetch('/api/'+p,{headers:h}); if(!r.ok) throw new Error(p+' → '+r.status); return r.json();
+}
+let AGENTS=[], ACT={};
+async function load(){
+  document.getElementById('err').innerHTML='';
+  try{
+    const a=await api('agents'); AGENTS=a.agents||[];
+    const logs=await api('logs'); const room=await api('room'); const props=await api('proposals');
+    ACT={};
+    for(const ag of AGENTS){
+      const nm=ag.name;
+      let tasks=0; try{ tasks=(logs.logs||logs||[]).filter(f=>String(f).startsWith(nm+'_')).length }catch{}
+      let chats=0, mem=0;
+      try{ const c=await api('agents/'+ag.id+'/chat'); chats=(c.history||[]).length }catch{}
+      try{ const m=await api('agents/'+ag.id+'/memory'); mem=String(m.memory||'').split('\n').filter(x=>x.trim().startsWith('-')).length }catch{}
+      const roomN=(room.room||[]).filter(m=>m.from===nm).length;
+      const propN=(props.proposals||[]).filter(p=>p.agent===nm).length;
+      ACT[nm]={tasks,chats,room:roomN,props:propN,mem};
+    }
+    renderAll();
+  }catch(e){
+    document.getElementById('err').innerHTML='<div class="err">Gagal ambil data API: '+e.message+'. Pastikan dashboard jalan dan file ini di folder public/ (buka via http://localhost:5000/kpi.html, bukan file://).</div>';
+  }
+}
+function renderAll(){
+  const s=document.getElementById('summary');
+  const tot=Object.values(ACT).reduce((x,a)=>({tasks:x.tasks+a.tasks,chats:x.chats+a.chats,room:x.room+a.room,props:x.props+a.props,mem:x.mem+a.mem}),{tasks:0,chats:0,room:0,props:0,mem:0});
+  s.innerHTML =
+    stat(tot.tasks,'Task dijalankan')+stat(tot.chats,'Pesan chat')+
+    stat(tot.room,'Pesan antar-agent')+stat(tot.props,'Usulan skill')+stat(tot.mem,'Ingatan tersimpan');
+  renderCards();
+}
+const stat=(b,l)=>`<div class="stat"><b>${b}</b><span>${l}</span></div>`;
+function renderCards(){
+  const g=document.getElementById('grid'); g.innerHTML='';
+  for(const ag of AGENTS){
+    const nm=ag.name, a=ACT[nm]||{tasks:0,chats:0,room:0,props:0,mem:0};
+    const kpis=(KPI_DEF[nm]||[]).map((k,i)=>{
+      const v=kpiVal(nm,i), pct=Math.min(100,Math.round(v/k[1]*100));
+      return `<div class="kpi"><div class="row"><span>${k[0]}</span><span class="t">${v} / ${k[1]}</span></div>
+      <div class="bar"><i class="${pct>=100?'done':''}" style="width:${pct}%"></i></div>
+      <div class="btns"><button onclick="kpiAdd('${nm}',${i},1)">+1</button><button class="ghost" onclick="kpiAdd('${nm}',${i},-1)">−1</button></div></div>`;
+    }).join('');
+    g.innerHTML+=`<div class="card"><h3>${nm}</h3><div class="role">${ag.role||''}</div>
+      <div class="act"><span class="pill">Task <b>${a.tasks}</b></span><span class="pill">Chat <b>${a.chats}</b></span><span class="pill">Antar-agent <b>${a.room}</b></span><span class="pill">Usulan <b>${a.props}</b></span><span class="pill">Ingatan <b>${a.mem}</b></span></div>
+      ${kpis||'<div class="role">Belum ada definisi KPI.</div>'}</div>`;
+  }
+}
+load();
+</script>
+</body>
+</html>
