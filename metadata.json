@@ -1,0 +1,8 @@
+{
+  "name": "KPI Dashboard — 10 Agent Hermes",
+  "description": "Dashboard pemantauan aktivitas live dan pencatatan KPI bulanan untuk 10 Agent Hermes (HR Admin, Upwork Freelance, Personal Branding, Excel Mastery, Content Creators, Full-Stack Dev, dan 3D Design).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
