@@ -161,12 +161,48 @@ Semua endpoint sukses:
 
 ### 3.8. Desain database
 
-- Tentukan relasi dulu di atas kertas: one-to-many (products → order_items), many-to-many (pakai tabel pivot: `product_tags`), one-to-one (users → profiles).
-- Setiap tabel: primary key (UUID atau auto-increment — konsisten dalam satu proyek), `created_at` dan `updated_at`.
-- Index: wajib untuk semua foreign key, kolom yang sering di-filter (`status`, `category`), dan kolom pencarian teks yang sering dipakai. Jangan index semua kolom — index memperlambat write.
-- Migrasi: setiap perubahan skema = satu file migrasi berversi (`001_create_products.sql`, `002_add_price_to_products.sql`). Jangan ubah skema manual langsung di database produksi. Migrasi harus reversible (tulis `down`-nya).
-- Jangan simpan data turunan yang bisa dihitung (total harga order) kecuali untuk alasan performa yang terukur — hitung saat query atau pakai view.
-- Soft delete (`deleted_at`) untuk data bisnis penting (orders, users); hard delete hanya untuk data sementara.
+**Konvensi penamaan (wajib, konsisten di seluruh proyek):**
+- Tabel: plural, snake_case — `employees`, `leave_requests`, `product_tags` (tabel pivot: gabungan dua nama singular, di-plural-kan).
+- Primary key: selalu bernama `id`. Pakai UUID (`gen_random_uuid()`) untuk tabel yang terekspos ke client/URL; `BIGSERIAL` boleh untuk tabel internal murni — tapi konsisten per proyek, jangan campur.
+- Foreign key: `<nama_tabel_singular>_id` — `employee_id`, `leave_type_id`.
+- Boolean diawali `is_`: `is_active`. Kolom waktu memakai sufiks jelas: `hire_date` (DATE), `check_in_at` (TIMESTAMPTZ).
+- Jangan pakai kata cadangan SQL sebagai nama tabel/kolom (`user`, `order`, `group`) — pakai `app_users`, `purchase_orders`.
+
+**Relasi & perilaku hapus:**
+- Tentukan relasi dulu di atas kertas: one-to-many (`employees` → `attendances`), many-to-many (pakai tabel pivot), one-to-one (`users` → `profiles`).
+- Setiap FK wajib tentukan `ON DELETE` secara eksplisit: default `RESTRICT` (tolak hapus parent yang masih punya child). `CASCADE` hanya untuk child yang tidak bermakna tanpa parent (contoh: `order_items` ikut terhapus bersama `orders`). `SET NULL` hanya untuk referensi opsional.
+- Karena data bisnis memakai soft delete, parent praktis tidak pernah di-hard-delete — FK tetap melindungi dari penghapusan tak sengaja.
+
+**Kolom wajib & audit:**
+- Setiap tabel: `id`, `created_at`, `updated_at` (TIMESTAMPTZ, default `now()`).
+- Data bisnis penting: tambah `deleted_at` (soft delete); untuk alur persetujuan tambah kolom audit `created_by` / `approved_by` (+ `approved_at`).
+
+**Waktu & zona waktu:**
+- Selalu simpan sebagai `TIMESTAMPTZ` — bukan `TIMESTAMP` naive, bukan string. Aplikasi membaca/menulis dalam satu zona waktu kanonis (untuk Indonesia: `Asia/Jakarta`); konversi ke zona lokal hanya di lapisan tampilan.
+- Untuk data harian seperti absensi, simpan kolom `date` (DATE) terpisah dari `check_in_at`/`check_out_at` (TIMESTAMPTZ) agar query per hari tidak perlu casting.
+
+**Nilai terbatas: CHECK vs tabel lookup:**
+- Status/alur yang tetap dan pendek (mis. `pending`/`approved`/`rejected`) → `CHECK (status IN (...))` atau ENUM; tulis daftar nilai valid di migrasi dan dokumentasikan transisi yang diizinkan.
+- Data yang bisa bertambah/diubah atau punya atribut sendiri (jenis cuti + kuota, kategori produk) → tabel lookup tersendiri (`leave_types`), bukan string bebas.
+
+**Constraint sebagai pertahanan lapis kedua** (validasi backend di 3.7 tetap wajib):
+- `UNIQUE` untuk aturan "satu X per Y": `UNIQUE (employee_id, date)` di `attendances` mencegah absensi ganda karyawan di tanggal yang sama.
+- `CHECK` untuk logika sederhana: `CHECK (end_date >= start_date)`, `CHECK (total_days > 0)`, `CHECK (price >= 0)`.
+- Untuk rentang tanggal yang tidak boleh tumpang tindih (pengajuan cuti), validasi di service + pertimbangkan exclusion constraint Postgres bila database mendukung.
+
+**Index & data turunan:**
+- Index wajib: semua foreign key, kolom yang sering di-filter (`status`, `category`), kolom pencarian teks yang sering dipakai. Jangan index semua kolom — index memperlambat write.
+- Jangan simpan data turunan murni yang bisa dihitung (total harga order → hitung saat query atau pakai view), KECUALI angka yang ditetapkan sebagai fakta bisnis saat approval (mis. `total_days` cuti yang disetujui setelah mengecualikan weekend/hari libur) — itu data resmi, bukan turunan.
+
+**Migrasi:**
+- Setiap perubahan skema = satu file migrasi berversi (`001_create_products.sql`, `002_add_price_to_products.sql`), reversible (tulis `down`-nya). Jangan ubah skema manual langsung di database produksi.
+
+**Checklist review skema** (sebelum menulis migrasi):
+- [ ] Nama tabel/kolom ikut konvensi; tidak ada kata cadangan SQL.
+- [ ] Setiap FK ada, punya `ON DELETE` eksplisit, dan ter-index.
+- [ ] `UNIQUE`/`CHECK` menutup aturan bisnis yang bisa dijamin database.
+- [ ] Semua kolom waktu `TIMESTAMPTZ`; kolom DATE terpisah untuk data harian.
+- [ ] Soft delete (`deleted_at`) + kolom audit untuk data bisnis dan alur persetujuan.
 
 ### 3.9. Autentikasi & otorisasi
 
@@ -191,6 +227,7 @@ Semua endpoint sukses:
 - [ ] Validasi input ada di setiap endpoint yang menerima body/query.
 - [ ] Kasus error utama ditest: 400, 401, 403, 404.
 - [ ] Migrasi database bisa jalan maju dan mundur.
+- [ ] Skema lolos checklist review 3.8 (konvensi nama, ON DELETE eksplisit, UNIQUE/CHECK, TIMESTAMPTZ).
 - [ ] `.env.example` diperbarui jika ada env baru.
 - [ ] Tidak ada `console.log` debugging atau kode komentar mati yang tertinggal.
 
@@ -225,3 +262,6 @@ Hal yang TIDAK boleh dilakukan saat memakai skill ini:
 10. **Jangan buat endpoint tanpa autentikasi untuk data sensitif** — default-nya proteksi dulu, buka akses hanya jika memang publik.
 11. **Jangan menebak struktur proyek yang sudah ada** — baca dulu file/folder yang ada sebelum menambah yang baru; ikuti konvensi yang sudah berjalan.
 12. **Jangan melebarkan scope** — kerjakan yang diminta; fitur tambahan di luar permintaan harus ditanyakan dulu, bukan langsung dibangun.
+13. **Jangan biarkan aturan "satu X per Y" tanpa UNIQUE constraint** — mis. absensi ganda untuk karyawan + tanggal yang sama; validasi di aplikasi saja bisa lolos saat race condition.
+14. **Jangan simpan waktu sebagai TIMESTAMP naive atau string** — selalu TIMESTAMPTZ; bug zona waktu muncul diam-diam di produksi dan sulit dilacak.
+15. **Jangan pakai string bebas untuk data referensi yang punya atribut** (jenis cuti, kategori produk) — jadikan tabel lookup; string bebas berarti data kotor dan tidak bisa ditambah kuota/aturan.
