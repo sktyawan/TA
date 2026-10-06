@@ -81,7 +81,10 @@ Sebelum mengerjakan apa pun, pastikan brief mencakup poin-poin ini. Kalau ada ya
    - Components: semua elemen berulang (button, input, card) jadi component dengan variants (default/hover/disabled, size S/M/L).
    - Auto-layout: pakai di semua frame dan component agar responsif.
    - Naming: `Button/Primary/Large`, `Input/Text/Default` — format `Kategori/Nama/Variant`.
-3. **Hi-fi mockup**: Terapkan warna, tipografi, dan spacing dari brand/design system. Spacing pakai kelipatan 4 atau 8 (4, 8, 16, 24, 32). Kontras teks minimal 4.5:1 untuk body text.
+3. **Hi-fi mockup**: Terapkan warna, tipografi, dan spacing dari brand/design system. Spacing pakai kelipatan 4 atau 8 (4, 8, 16, 24, 32).
+   - **Kontras teks** (wajib diuji, bukan dikira-kira): body text minimal **4.5:1**, teks besar (≥18px atau ≥14px bold) minimal **3:1**, ikon/border komponen interaktif minimal **3:1**. Teks disabled dikecualikan dari angka ini tapi harus tetap terbaca (jangan abu terlalu muda).
+   - **Cara menguji**: pakai WebAIM Contrast Checker, plugin Figma (Stark/A11y Annotation), atau hitung rasio luminance manual. Uji SETIAP pasangan teks-background yang dipakai, catat hasilnya di dokumentasi komponen.
+   - **Jangan hanya mengandalkan warna** untuk menyampaikan status/makna — selalu pasangkan dengan ikon dan/atau teks (mis. badge "Terlambat" = dot merah + tulisan, bukan dot merah saja).
 4. **Prototype**: Hubungkan screen dengan interaksi dasar (tap, hover) untuk alur utama saja — cukup untuk demo, bukan semua edge case.
 5. **Handoff ke developer**: Siapkan:
    - Link file dengan akses view, halaman `04 - Hi-Fi` sebagai sumber kebenaran.
@@ -109,19 +112,77 @@ Sebelum mengerjakan apa pun, pastikan brief mencakup poin-poin ini. Kalau ada ya
 
 ### 3.5. Membangun Design System
 
-1. **Design tokens** (fondasi, dalam format yang bisa dibaca developer):
-   - Warna: `color.primary.500`, `color.neutral.100` — pakai skala numerik (50–900).
-   - Spacing: `space.1` = 4px, `space.2` = 8px, dst.
-   - Tipografi: `font.heading.lg` (family + size + weight + line-height).
-   - Radius, shadow, border width dengan nama semantik.
-2. **Komponen**: Bangun dari token, bukan nilai hardcode. Tiap komponen punya: variants, states (default/hover/focus/disabled), dokumentasi kapan dipakai dan kapan TIDAK dipakai, serta contoh do/don't.
-3. **Dokumentasi**: Satu halaman per komponen: nama, deskripsi 1 kalimat, anatomi (bagian-bagiannya), variants, aturan pakai, contoh benar/salah.
-4. **Naming convention**: `kategori/nama/variant/state` — konsisten di semua file. Contoh: `color/primary/500`, `button/primary/large/disabled`.
-5. **Versioning**: Pakai semantic versioning (major.minor.patch).
-   - Patch: perbaikan visual kecil tanpa mengubah API/props.
-   - Minor: komponen baru atau variant baru, backward compatible.
-   - Major: perubahan breaking (rename token, hapus komponen).
-   - Catat changelog setiap rilis: apa berubah, kenapa, dan panduan migrasi bila breaking.
+Bangun dalam dua lapis token — jangan langsung pakai warna mentah di komponen:
+
+**Lapis 1 — Primitive (nilai mentah, WAJIB ada nilai HEX di setiap token):**
+- Warna: `color.primary.500` `#2563EB` — pakai skala numerik 50–900, dan `500` adalah warna base/acuan. Minimal: 1 primer (10 stop), 1 netral (10 stop), status: success/warning/danger/info (masing-masing 100/500/700).
+- Spacing: `space.1` = 4px, `space.2` = 8px, dst (kelipatan 4).
+- Tipografi: `font.heading.lg` (family + size + weight + line-height).
+- Radius, shadow, border width dengan nama semantik (`radius.md`, `shadow.lg`).
+
+**Lapis 2 — Semantic alias (yang dipakai komponen; inilah "API" design system):**
+
+| Alias | Menunjuk ke | Contoh pakai |
+|---|---|---|
+| `color.bg.page` / `color.bg.surface` | `neutral.50` / `#FFFFFF` | background halaman / kartu |
+| `color.text.primary` / `.secondary` / `.muted` | `neutral.900` / `600` / `400` | hierarki teks |
+| `color.text.inverse` | `#FFFFFF` | teks di atas warna gelap |
+| `color.border.default` / `.strong` | `neutral.200` / `300` | garis pembatas |
+| `color.action.primary.default` / `.hover` / `.active` | `primary.600` / `700` / `800` | tombol primer |
+| `color.action.on-primary` | `#FFFFFF` | teks di atas tombol primer |
+| `color.status.success/warning/danger/info` | `*.500` masing-masing | badge, alert, dot status |
+| `color.focus.ring` | `primary.300` | outline fokus keyboard |
+
+Aturan: komponen HANYA boleh memakai alias, tidak boleh menunjuk primitive langsung. Ganti brand = ganti mapping alias, bukan ubah 20 komponen.
+
+**Verifikasi palet (wajib sebelum lanjut):** uji setiap pasangan teks-background dari tabel alias dengan aturan kontras §3.3 (4.5:1 body, 3:1 teks besar/komponen). Pasangan yang gagal = ganti stop warnanya (mis. `text.secondary` dari `neutral.500` naik ke `neutral.600`), bukan "nanti saja".
+
+**Kriteria pemilihan font UI** (jangan asal pilih yang "bagus"):
+1. Mendukung Latin Extended (karakter Bahasa Indonesia) — cek di Google Fonts/specimen.
+2. Punya angka tabular (`font-feature-settings: "tnum"`) untuk tabel data (NIP, gaji, tanggal) agar kolom rata kanan.
+3. Minimal tersedia weight 400/500/600/700.
+4. Fallback stack sistem selalu dicatat: `system-ui, -apple-system, "Segoe UI", sans-serif`.
+5. Maksimal 2 keluarga (1 teks, 1 opsional monospace untuk data/kode).
+
+**Skala tipografi** — pakai rasio modular agar tidak asal angka:
+- Base body 14px (dashboard desktop) atau 16px (publik/mobile); rasio 1.125 (rapat) atau 1.25 (lega).
+- Contoh (base 14, rasio 1.25): caption 11 → body-sm 12 → body 14 → h4 18 → h3 20 → h2 24 → h1 28 → display 32.
+- Line-height: body 1.5–1.6, heading 1.2–1.3. Catat sebagai token: `font.body.md` = Inter 14/22 (1.57), 400.
+
+**Spec card komponen** (format baku — setiap komponen WAJIB punya ini, satu format untuk semua):
+1. **Nama + deskripsi 1 kalimat** + kapan dipakai / kapan TIDAK dipakai.
+2. **Anatomi ukuran**: tinggi, padding, radius, tipografi — ditulis sebagai TOKEN (`space.4`, `radius.md`), bukan angka mentah.
+3. **Variants & states**: daftar varian; state wajib = default, hover, active, focus-visible, disabled (+ loading dan error bila relevan).
+4. **Perilaku**: apa yang terjadi saat hover/klik/loading/error/empty.
+5. **Aksesibilitas**: bisa dioperasikan keyboard (urutan tab logis), peran ARIA bila bukan elemen native, `focus-visible` selalu terlihat (ring 2px `color.focus.ring`, offset 2px).
+6. **Do / Don't**: 1 contoh benar + 1 contoh salah bergambar.
+
+**Komponen data-dense** (wajib ada untuk dashboard/admin seperti HR): Table (tinggi baris 44/56 untuk density normal/nyaman, header 12/600, sort/filter ikon, sticky header, pagination, empty state), Search + Filter bar, Pagination, Badge status (selalu ikon+teks, bukan warna saja), Empty state, Skeleton loading.
+
+**Struktur file Figma khusus design system** (terpisah dari file mockup):
+- Pages: `01 - Cover & Changelog`, `02 - Tokens` (primitive + alias, tampilkan HEX), `03 - Foundations` (tipografi, spacing, radius, shadow, ikonografi), `04 - Components` (satu section per komponen berisi spec card + variants + do/don't), `05 - Patterns` (contoh rakitan: form, tabel + filter, kartu stat), `99 - Archive`.
+
+**Handoff token ke developer** — serahkan SELALU dalam dua bentuk:
+1. **CSS variables** (sumber kebenaran untuk web):
+```css
+:root {
+  --color-action-primary-default: #1D4ED8;
+  --color-action-primary-hover: #1E40AF;
+  --color-text-primary: #0F172A;
+  --color-text-secondary: #475569;
+  --color-border-default: #E2E8F0;
+  --space-4: 16px;
+  --radius-md: 8px;
+  --font-body-md: 400 14px/22px "Inter", system-ui, sans-serif;
+}
+```
+2. **JSON tokens** (untuk Tailwind config / style dictionary / mobile): struktur `{ "color": { "action": { "primary": { "default": { "value": "#1D4ED8" } } } } }`.
+
+**Versioning**: Pakai semantic versioning (major.minor.patch).
+- Patch: perbaikan visual kecil tanpa mengubah API/props.
+- Minor: komponen baru atau variant baru, backward compatible.
+- Major: perubahan breaking (rename token, hapus komponen).
+- Catat changelog setiap rilis: apa berubah, kenapa, dan panduan migrasi bila breaking.
 
 ### 3.6. Format Output Standar
 
@@ -159,4 +220,10 @@ Setiap pekerjaan selesai harus menyertakan:
 - **Jangan desain screen tanpa fondasi.** Dilarang menggambar hi-fi screen sebelum ada (mini) UI kit: warna, tipografi, dan komponen dasar harus ditetapkan dulu.
 - **Jangan meniru aset visual kompetitor.** Boleh meniru pola interaksi/UX yang bagus, tapi warna, logo, ikon khas, dan ilustrasi harus orisinal atau berlisensi jelas.
 - **Jangan mengubah identitas yang sudah ditetapkan tanpa persetujuan.** Warna brand, bentuk logo, dan font primer tidak boleh "diperbagus" atas inisiatif sendiri — itu keputusan pemilik brand.
+- **Jangan definisikan warna tanpa nilai.** Setiap token warna wajib punya nilai HEX (dan RGB/CMYK bila untuk brand). Token bernama `primary.500` tanpa nilai adalah placeholder, bukan deliverable.
+- **Jangan biarkan komponen memakai warna mentah.** Komponen hanya boleh memakai alias semantik (`color.action.primary.default`), tidak pernah `primary.600` langsung — kalau tidak, ganti brand berarti mengubah 20 komponen satu per satu.
+- **Jangan serahkan palet tanpa uji kontras.** Setiap pasangan teks-background dari tabel alias wajib lolos 4.5:1 (body) / 3:1 (teks besar & komponen). Pasangan yang gagal = revisi stop warnanya saat itu juga.
+- **Jangan menyampaikan status hanya lewat warna.** Badge, dot, atau highlight status wajib ditemani ikon dan/atau teks ("Terlambat", bukan sekadar merah) — pengguna buta warna harus tetap paham.
+- **Jangan buat komponen tanpa state focus-visible dan disabled.** Komponen yang tidak bisa dioperasikan keyboard atau tidak punya state disabled adalah komponen setengah jadi.
+- **Jangan pilih font UI tanpa cek teknis.** Pastikan mendukung Latin Extended (Bahasa Indonesia), punya angka tabular untuk tabel data, dan catat fallback stack sistemnya.
 - **Jangan render di resolusi final untuk preview.** Kirim preview kecil/ber-watermark dulu untuk persetujuan arah, baru render final resolusi penuh — menghemat waktu komputasi.

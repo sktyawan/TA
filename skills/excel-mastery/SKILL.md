@@ -72,12 +72,49 @@ Sintaks VLOOKUP (hanya jika file harus dibuka di Excel lama tanpa XLOOKUP):
 
 Kapan dipakai: mengambil data dari tabel referensi (mis. nama produk dari kode, harga dari SKU, nama karyawan dari NIP).
 
-Contoh nyata — ambil nama produk dari kode di sel F2, tabel master di sheet "Master" (kolom A=kode, B=nama):
+Contoh nyata — ambil nama produk dari kode di sel F2, tabel master di sheet "Master" (kolom A=kode, B=nama, data A2:B501):
 ```
-=XLOOKUP(F2; Master!A:A; Master!B:B; "Kode tidak terdaftar")
+=XLOOKUP(F2; Master!$A$2:$A$501; Master!$B$2:$B$501; "Kode tidak terdaftar")
 ```
+Tanda `$` mengunci range agar tidak bergeser saat formula di-fill down (lihat prosedur di bawah). Jika data sudah berupa tabel terstruktur (Ctrl+T, mis. bernama `TabelMaster`), lebih baik:
+```
+=XLOOKUP(F2; TabelMaster[Kode]; TabelMaster[Nama]; "Kode tidak terdaftar")
+```
+Referensi tabel tidak perlu `$` dan otomatis ikut baris baru.
 
 Aturan: XLOOKUP selalu diutamakan karena bisa mencari ke kiri, tidak butuh nomor kolom, dan punya argumen `if_not_found`. VLOOKUP hanya fallback.
+
+#### Prosedur pakai XLOOKUP (jalankan berurutan)
+
+1. **Tentukan kunci pencariannya.** Apa yang kamu pegang (mis. kode barang di A2), dan di kolom mana kunci itu berada di tabel master. Kunci harus unik — jika satu kode muncul 2x di master, XLOOKUP diam-diam mengambil baris PERTAMA yang cocok.
+2. **Cek duplikat di kolom kunci master SEBELUM lookup.** Di kolom helper: `=COUNTIFS(Master!$A$2:$A$501; A2)>1` → TRUE berarti duplikat. Bereskan dulu (atau putuskan sadar: pakai `search_mode` -1 untuk ambil kecocokan TERAKHIR).
+3. **Cek tipe data kedua sisi.** Kode "00123" sebagai teks TIDAK SAMA dengan angka 123. Cara cek cepat: `=ISTEXT(A2)` vs `=ISTEXT(Master!A2)` — hasilnya harus sama. Atau `=A2=Master!A5` → FALSE padahal terlihat sama = beda tipe/spasi.
+4. **Tulis formula dengan referensi terkunci.** Pola baku (contoh: kunci di A2, master di sheet "Master" A2:C501):
+   ```
+   =XLOOKUP(A2; Master!$A$2:$A$501; Master!$C$2:$C$501; "Tidak ada")
+   ```
+   Kunci (`$`) WAJIB pada `lookup_array` dan `return_array` jika formula akan di-fill down; `lookup_value` (mis. `A2`) justru dibiarkan relatif agar mengikuti baris.
+5. **Fill down, lalu verifikasi sampel.** Tarik formula ke seluruh baris, lalu cek manual 3–5 baris (satu yang pasti ketemu, satu yang pasti tidak ketemu, satu di baris akhir). Pastikan baris akhir tidak `#N/A` massal — itu tanda range bergeser (lupa `$`).
+6. **Sadari konsekuensi `if_not_found` berupa teks.** Jika kolom hasil seharusnya angka (mis. harga), sel "Tidak ada" adalah TEKS — `SUM` akan melewatinya tanpa error. Itu benar, tapi jangan heran kalau total tidak mencakup baris tersebut.
+
+Contoh benar vs salah (cari harga, kunci di A2:A501 sheet Order, master di sheet "Master" A2:C501):
+
+BENAR — range dikunci, fill down aman:
+```
+=XLOOKUP(A2; Master!$A$2:$A$501; Master!$C$2:$C$501; "Tidak ada")
+```
+
+SALAH — tanpa `$`, di-drag ke B3 range menjadi `Master!A3:A502`, ke B500 menjadi `Master!A500:A999` → hasil salah diam-diam:
+```
+=XLOOKUP(A2; Master!A2:A501; Master!C2:C501; "Tidak ada")
+```
+
+SALAH — range penuh kolom di file 500+ baris (melanggar aturan optimasi 3.2, Excel memindai 1 juta baris):
+```
+=XLOOKUP(A2; Master!A:A; Master!C:C; "Tidak ada")
+```
+
+Catatan `match_mode`: mode `-1` (cocok persis atau nilai lebih kecil) dan `1` (atau lebih besar) paling andal pada data TERURUT. Mode binary search (`2`/`-2`) WAJIB data terurut ascending/descending — di data acak hasilnya ngawur tanpa peringatan. Jika ragu, kosongkan saja (default 0 = cocok persis, tidak butuh sortir).
 
 #### C. IF / IFS — logika bercabang
 
@@ -227,7 +264,7 @@ Klasifikasi: Kritis = mengubah hasil hitungan/laporan. Sedang = data tidak konsi
 
 **Proses:**
 1. Audit cepat: `=COUNTBLANK(B2:B4801)` → 0 blank di cabang. `=COUNT(E2:E4801)` vs `=COUNTA(E2:E4801)` → 37 sel harga berisi teks (tipe data salah) → perbaiki via Text to Columns. `=UNIQUE(B2:B4801)` → ditemukan "Bandung " (dengan spasi) → `TRIM` massal.
-2. Debug kolom F: `#N/A` dari `VLOOKUP` tanpa `if_not_found` — 12 kode produk tidak ada di sheet Master → ganti ke `=XLOOKUP(C2; Master!A:A; Master!B:B; "Kode tidak terdaftar")`.
+2. Debug kolom F: `#N/A` dari `VLOOKUP` tanpa `if_not_found` — 12 kode produk tidak ada di sheet Master → ganti ke `=XLOOKUP(C2; TabelMaster[Kode]; TabelMaster[Nama]; "Kode tidak terdaftar")` (sheet Master sudah dijadikan tabel `TabelMaster` via Ctrl+T).
 3. Optimasi: Ctrl+T jadikan `TabelJual`; formula rekap September per cabang (mis. di sheet "Rekap", A2=nama cabang):
    ```
    =SUMIFS(TabelJual[Harga]; TabelJual[Cabang]; A2; TabelJual[Tanggal]; ">=01/09/2026"; TabelJual[Tanggal]; "<=30/09/2026")
@@ -239,6 +276,9 @@ Klasifikasi: Kritis = mengubah hasil hitungan/laporan. Sedang = data tidak konsi
 
 ## 5. Anti-pattern
 
+- **Jangan** fill-down formula XLOOKUP/SUMIFS/COUNTIFS tanpa mengunci range acuan dengan `$` — range yang bergeser menghasilkan jawaban salah diam-diam, bukan error.
+- **Jangan** XLOOKUP ke kolom kunci yang berduplikat tanpa sadar hanya baris pertama yang diambil — cek duplikat dulu (lihat prosedur XLOOKUP langkah 2).
+- **Jangan** memakai `match_mode` binary search (`2`/`-2`) di data yang tidak terurut.
 - **Jangan** menumpuk IF lebih dari 2 level — pakai IFS atau tabel referensi + XLOOKUP.
 - **Jangan** memakai VLOOKUP tanpa argumen ke-4 `FALSE`; dan jangan pakai VLOOKUP sama sekali jika XLOOKUP tersedia.
 - **Jangan** membiarkan `#N/A`/`#VALUE!` mentah di output yang dilihat pengguna — selalu tangani dengan `if_not_found`, `IFERROR`/`IFNA`, atau perbaiki akarnya.
