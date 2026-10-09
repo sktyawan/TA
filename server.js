@@ -8,6 +8,22 @@ import { GoogleGenAI } from '@google/genai';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ===== NOTIFIKASI TELEGRAM (opsional, via env) =====
+// Set TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID untuk menerima notifikasi:
+// cron selesai, usulan skill baru, proposal disetujui/ditolak, error provider.
+const TG_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TG_CHAT = process.env.TELEGRAM_CHAT_ID || '';
+async function notifyTelegram(text) {
+  if (!TG_TOKEN || !TG_CHAT) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_CHAT, text: String(text).slice(0, 4000), parse_mode: 'HTML' })
+    });
+  } catch (e) { console.warn('[TG] gagal kirim notifikasi:', e.message); }
+}
+
 // ===== PERSISTENSI DISK: state penting selamat dari restart server =====
 const DATA_DIR = path.join(__dirname, 'data');
 function loadState(file, fallback) {
@@ -480,6 +496,133 @@ async function generateStepWithAI(agent, userGoal, prevOutputs) {
   return text;
 }
 
+// ===== EVALS: nilai kualitas tiap hasil orkestrasi (AI judge) + skor per agent =====
+let EVALS = loadState('evals.json', null) || [];
+let AGENT_SCORES = loadState('agent_scores.json', null) || {};
+async function evaluateOrchestration(orch) {
+  if (!BRAIN_ENABLED) return;
+  try {
+    const judged = [];
+    for (const step of orch.steps) {
+      const prompt =
+        `Kamu adalah juri kualitas. Nilai HASIL KERJA agent berikut dengan skala 1-10 untuk tiap kriteria.\n` +
+        `Tujuan: "${orch.goal}"\nAgent: ${step.agentName} (${step.agentId})\nHasil kerja:\n${step.output}\n\n` +
+        `Kriteria: (1) Relevansi terhadap tujuan, (2) Konkret & bisa dieksekusi, (3) Kejelasan.\n` +
+        `Jawab HANYA dengan JSON: {"relevansi": <1-10>, "konkret": <1-10>, "jelas": <1-10>}`;
+      let score = null;
+      try {
+        const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.2 } });
+        const m = (r.text || '').match(/\{[^{}]*\}/);
+        if (m) {
+          const j = JSON.parse(m[0]);
+          const vals = [j.relevansi, j.konkret, j.jelas].map(Number).filter(v => v >= 1 && v <= 10);
+          if (vals.length === 3) score = Math.round(vals.reduce((a, b) => a + b, 0) / 3 * 10) / 10;
+        }
+      } catch (e) { /* step ini tidak dinilai */ }
+      judged.push({ agentId: step.agentId, agentName: step.agentName, score });
+      if (score !== null) {
+        const s = AGENT_SCORES[step.agentId] || { total: 0, count: 0 };
+        s.total += score; s.count += 1; s.avg = Math.round(s.total / s.count * 10) / 10;
+        s.lastAt = new Date().toISOString();
+        AGENT_SCORES[step.agentId] = s;
+      }
+    }
+    const scored = judged.filter(j => j.score !== null);
+    EVALS.unshift({
+      orchestrationId: orch.orchestrationId, at: new Date().toISOString(), goal: orch.goal,
+      brainMode: orch.brainMode,
+      avgScore: scored.length ? Math.round(scored.reduce((a, j) => a + j.score, 0) / scored.length * 10) / 10 : null,
+      scores: judged
+    });
+    if (EVALS.length > 50) EVALS.pop();
+    saveState('evals.json', EVALS);
+    saveState('agent_scores.json', AGENT_SCORES);
+  } catch (err) {
+    console.warn('[EVAL] gagal menilai:', err.message);
+  }
+}
+
+// ===== RANI OTOMATIS: analisis terjadwal + auto-ajukan usulan perbaikan skill =====
+async function runAnalystCycle(triggeredBy = 'scheduler') {
+  if (!BRAIN_ENABLED) {
+    console.log('[ANALYST] dilewati — GEMINI_API_KEY belum diset');
+    return { skipped: true, reason: 'GEMINI_API_KEY belum diset' };
+  }
+  const rani = findAgent('rani');
+  if (!rani) return { skipped: true, reason: 'agent rani tidak ditemukan' };
+  try {
+    // Kumpulkan bahan analisis: skor terlemah, usulan terakhir, riwayat eval
+    const weak = Object.entries(AGENT_SCORES)
+      .map(([id, s]) => ({ id, avg: s.avg, count: s.count }))
+      .filter(x => x.count >= 2)
+      .sort((a, b) => a.avg - b.avg)
+      .slice(0, 3);
+    const recentEvals = EVALS.slice(0, 5).map(e => ({
+      goal: e.goal, avgScore: e.avgScore,
+      terendah: (e.scores || []).filter(s => s.score !== null).sort((a, b) => a.score - b.score).slice(0, 2)
+    }));
+    const prompt =
+      `Kamu adalah Rani, analis konten & skill. Analisis data berikut dan hasilkan MAKSIMAL 3 usulan perbaikan skill yang konkret.\n\n` +
+      `Skor rata-rata agent terlemah: ${JSON.stringify(weak)}\n` +
+      `Eval orkestrasi terakhir: ${JSON.stringify(recentEvals)}\n\n` +
+      `Untuk tiap usulan, jawab dalam format JSON array. Tiap item: {"skill": "<nama-skill persis>", "title": "<judul maks 80 karakter>", "reason": "<alasan berbasis data, maks 200 karakter>", "saran_isi": "<poin-poin konkret yang harus ada di versi baru>"}.\n` +
+      `Hanya usulkan bila ada data pendukung. Bila tidak ada yang layak diusulkan, jawab: []`;
+    const r = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt, config: { temperature: 0.5 } });
+    const m = (r.text || '').match(/\[[\s\S]*\]/);
+    let created = [];
+    if (m) {
+      const items = JSON.parse(m[0]);
+      for (const it of (Array.isArray(items) ? items : []).slice(0, 3)) {
+        if (!it.skill || !SKILL_REGISTRY[it.skill]) continue;
+        // Ambil isi skill sekarang sebagai basis usulan
+        const cur = fs.readFileSync(path.join(SKILL_DIR, it.skill, 'SKILL.md'), 'utf-8');
+        const proposal = {
+          id: 'prop-' + (++SKILL_PROPOSAL_SEQ),
+          agent: 'Rani', skill: it.skill,
+          title: String(it.title || 'Usulan perbaikan').slice(0, 200),
+          changes: cur + `\n\n## Catatan perbaikan (usulan Rani ${new Date().toISOString().slice(0, 10)})\n${String(it.saran_isi || '').slice(0, 2000)}`,
+          reason: String(it.reason || '').slice(0, 1000) + ` [auto-analyst:${triggeredBy}]`,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+        PROPOSALS.unshift(proposal);
+        created.push(proposal.id);
+      }
+      if (created.length) saveState('proposals.json', PROPOSALS);
+    }
+    LOGS.unshift(`Rani_${new Date().toISOString().split('T')[0]}_analyst_auto_${triggeredBy}.log`);
+    pushRoomMessage('Rani', 'All', `🔍 Analisis otomatis selesai (${triggeredBy}): ${created.length} usulan perbaikan skill diajukan.`);
+    return { success: true, proposals: created };
+  } catch (err) {
+    console.error('[ANALYST] gagal:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Trigger manual analisis Rani
+app.post('/api/analyst/run', async (req, res) => {
+  const out = await runAnalystCycle('manual');
+  res.json(out);
+});
+
+// Jadwal otomatis: tiap Senin 07:00 (cek tiap 30 detik bersama cron lain)
+setInterval(() => {
+  const now = new Date();
+  if (now.getDay() === 1 && now.getHours() === 7 && now.getMinutes() < 1) {
+    runAnalystCycle('weekly').catch(() => {});
+  }
+}, 30000);
+
+// Skor rata-rata per agent
+app.get('/api/agents/scores', (req, res) => {
+  res.json({ scores: AGENT_SCORES, evaluated: EVALS.length });
+});
+// Riwayat eval orkestrasi
+app.get('/api/evals', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 20, 50);
+  res.json({ evals: EVALS.slice(0, limit) });
+});
+
 async function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
   const userGoal = goal || 'Eksekusi kolaborasi terintegrasi antar Hermes Agents';
 
@@ -575,7 +718,7 @@ async function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy })
     LOGS.unshift(`Orchestration_${new Date().toISOString().split('T')[0]}_${triggeredBy}.log`);
   }
 
-  return {
+  const orchResult = {
     orchestrationId: 'orch_' + Date.now(),
     goal: userGoal,
     preset: workflowPreset || 'Custom Multi-Agent Pipeline',
@@ -584,6 +727,9 @@ async function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy })
     steps: pipelineSteps,
     executedAt: new Date().toISOString()
   };
+  // Nilai kualitas secara async — tidak menghambat response
+  evaluateOrchestration(orchResult).catch(() => {});
+  return orchResult;
 }
 
 app.post('/api/orchestration/execute', async (req, res) => {
@@ -848,6 +994,21 @@ app.get('/v1/models', (req, res) => {
   });
 });
 
+// ===== RATE LIMIT & BUDGET per key (sliding window 60 detik) =====
+const KEY_USAGE = new Map(); // keyId -> [timestamp...]
+function checkKeyLimits(key) {
+  const now = Date.now();
+  const arr = (KEY_USAGE.get(key.id) || []).filter(t => now - t < 60000);
+  KEY_USAGE.set(key.id, arr);
+  const limit = Number(key.rateLimit) || 60;
+  if (arr.length >= limit) return { ok: false, code: 429, error: `Rate limit terlampaui (${limit}/menit) — coba lagi sebentar` };
+  if (key.budget !== undefined && Number(key.used) >= Number(key.budget)) {
+    return { ok: false, code: 429, error: `Budget key habis ($${Number(key.used).toFixed(2)}/$${Number(key.budget).toFixed(2)})` };
+  }
+  arr.push(now);
+  return { ok: true };
+}
+
 // ===== 9ROUTER: teruskan /v1/chat/completions ke provider asli (bukan mock) =====
 // Resolve provider dari nama model: cocokkan daftar models, lalu tebak dari nama.
 function resolveProvider(model) {
@@ -863,6 +1024,12 @@ function resolveProvider(model) {
     : (m.includes('llama') || m.includes('mixtral')) ? 'groq' : null;
   if (guess) return ROUTER_PROVIDERS.find(p => p.provider === guess && p.status === 'active') || null;
   return null;
+}
+// Provider cadangan: yang aktif + punya apiKey, urut prioritas, kecuali yang sudah dicoba
+function failoverProviders(excludeIds = []) {
+  return ROUTER_PROVIDERS
+    .filter(p => p.status === 'active' && p.apiKey && !excludeIds.includes(p.id))
+    .sort((a, b) => (a.priority || 99) - (b.priority || 99));
 }
 
 // Normalisasi pesan OpenAI -> format contents Gemini
@@ -925,8 +1092,12 @@ async function forwardToProvider(provider, model, body) {
   const r = await fetch(base + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
-    body: JSON.stringify({ model, messages, temperature, max_tokens })
+    body: JSON.stringify({ model, messages, temperature, max_tokens, stream: body.stream || false })
   });
+  // Mode streaming: teruskan SSE apa adanya ke client
+  if (body.stream && r.ok && r.body) {
+    return { __stream: r.body };
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw { status: r.status, message: j.error?.message || ('Provider HTTP ' + r.status) };
   const choice = j.choices?.[0] || {};
@@ -950,6 +1121,10 @@ app.post('/v1/chat/completions', async (req, res) => {
   if (!validKey) {
     return res.status(401).json({ error: 'API key tidak valid — gunakan Bearer <redacted> 9Router yang aktif' });
   }
+  const limitCheck = checkKeyLimits(validKey);
+  if (!limitCheck.ok) {
+    return res.status(limitCheck.code).json({ error: limitCheck.error });
+  }
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'messages wajib diisi (array tidak kosong)' });
   }
@@ -963,8 +1138,27 @@ app.post('/v1/chat/completions', async (req, res) => {
   }
 
   const t0 = Date.now();
+  // Streaming hanya didukung provider OpenAI-compatible; selain itu fallback non-stream
+  const wantStream = !!(req.body || {}).stream;
+  const streamable = wantStream && !['anthropic', 'google'].includes(provider.provider);
   try {
-    const out = await forwardToProvider(provider, requestedModel, { messages, temperature, max_tokens });
+    const out = await forwardToProvider(provider, requestedModel, { messages, temperature, max_tokens, stream: streamable });
+    // Teruskan SSE langsung ke client
+    if (out.__stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      const reader = out.__stream.getReader();
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } finally { reader.releaseLock(); }
+      validKey.used = parseFloat((validKey.used + 0.0004).toFixed(4));
+      return res.end();
+    }
     const latencyMs = Date.now() - t0;
     const logEntry = {
       id: 'req_' + Date.now().toString().slice(-4),
@@ -991,7 +1185,35 @@ app.post('/v1/chat/completions', async (req, res) => {
       _9router_meta: { routed_provider: provider.name, latency_ms: latencyMs, key_authenticated: true }
     });
   } catch (err) {
-    const status = err.status || 502;
+    // Failover: coba provider cadangan berdasar prioritas
+    const tried = [provider.id];
+    let lastErr = err;
+    let out = null, failProvider = provider;
+    for (const fb of failoverProviders(tried)) {
+      try {
+        failProvider = fb;
+        out = await forwardToProvider(fb, requestedModel, { messages, temperature, max_tokens, stream: false });
+        break;
+      } catch (e2) { lastErr = e2; tried.push(fb.id); }
+    }
+    if (out) {
+      const latencyMs = Date.now() - t0;
+      ROUTER_TRAFFIC_LOGS.unshift({
+        id: 'req_' + Date.now().toString().slice(-4), ts: new Date().toISOString(),
+        model: requestedModel, agent: '9Router Client Proxy',
+        promptTokens: out.promptTokens, completionTokens: out.completionTokens,
+        latencyMs, status: 200, provider: failProvider.name + ' (failover)'
+      });
+      validKey.used = parseFloat((validKey.used + 0.0004).toFixed(4));
+      return res.json({
+        id: 'chatcmpl-9r-' + Math.random().toString(36).substring(2, 10),
+        object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: requestedModel,
+        choices: [{ index: 0, message: { role: 'assistant', content: out.text }, finish_reason: out.finish }],
+        usage: { prompt_tokens: out.promptTokens, completion_tokens: out.completionTokens, total_tokens: out.promptTokens + out.completionTokens },
+        _9router_meta: { routed_provider: failProvider.name, failover: true, tried, latency_ms: latencyMs, key_authenticated: true }
+      });
+    }
+    const status = lastErr.status || 502;
     ROUTER_TRAFFIC_LOGS.unshift({
       id: 'req_' + Date.now().toString().slice(-4),
       ts: new Date().toISOString(),
@@ -1002,7 +1224,8 @@ app.post('/v1/chat/completions', async (req, res) => {
       status,
       provider: provider.name
     });
-    res.status(status).json({ error: `Provider ${provider.name} gagal: ${err.message || 'unknown error'}` });
+    notifyTelegram(`⚠️ <b>Gateway error</b>: ${provider.name} gagal (${status}, failover habis) — ${lastErr.message || 'unknown error'}`);
+    res.status(status).json({ error: `Semua provider gagal. Terakhir ${failProvider.name}: ${lastErr.message || 'unknown error'}` });
   }
 });
 
@@ -1193,6 +1416,7 @@ app.post('/api/skills/:skillName/proposals', (req, res) => {
   PROPOSALS.unshift(proposal);
   saveState('proposals.json', PROPOSALS);
   LOGS.unshift(`Skill_${new Date().toISOString().split('T')[0]}_proposal_${proposal.id}_pending.log`);
+  notifyTelegram(`📝 <b>Usulan skill baru</b> (${proposal.id}): ${proposal.agent} → ${proposal.skill}\n${proposal.title}`);
   res.status(201).json({ proposal });
 });
 
@@ -1230,6 +1454,7 @@ app.put('/api/proposals/:id', (req, res) => {
     LOGS.unshift(`Skill_${new Date().toISOString().split('T')[0]}_proposal_${p.id}_rejected.log`);
   }
   saveState('proposals.json', PROPOSALS);
+  notifyTelegram(`${p.status === 'approved' ? '✅' : '❌'} <b>Usulan ${p.id}</b> ${p.status === 'approved' ? 'disetujui' : 'ditolak'}${p.status === 'approved' && p.changes ? ` — ${p.skill} naik ke v${SKILL_REGISTRY[p.skill].version}` : ''}`);
   res.json({ proposal: p });
 });
 
@@ -1311,6 +1536,7 @@ async function executeSchedule(schedule) {
       totalSteps: result.totalSteps, status: 'completed'
     });
     pushRoomMessage('Scheduler', 'All', `⏰ Cron "${schedule.name}" dieksekusi: ${result.totalSteps} langkah selesai.`);
+    notifyTelegram(`⏰ <b>Cron selesai</b>: ${schedule.name} — ${result.totalSteps} langkah.`);
   } catch (err) {
     schedule.lastStatus = 'failed';
     CRON_RUN_HISTORY.unshift({
