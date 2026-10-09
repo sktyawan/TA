@@ -32,8 +32,6 @@ report() { # $1=kategori $2=file:baris $3=pesan
 }
 
 EXCLUDES="--exclude-dir=node_modules --exclude-dir=.git --exclude-dir=dist --exclude-dir=build --exclude-dir=__pycache__ --exclude-dir=.venv --exclude-dir=coverage"
-# evals/ dikecualikan: berisi fixture secret PALSU yang disengaja untuk menguji pemindai
-EXCLUDES="$EXCLUDES --exclude-dir=evals"
 
 # 1. Secret hardcoded -------------------------------------------------------
 # (pola umum; skrip tidak pernah MENCETAK nilai secret, hanya lokasi + jenisnya)
