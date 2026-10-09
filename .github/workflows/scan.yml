@@ -1,0 +1,21 @@
+name: Bug Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Jalankan pemindai bug (secret, SQL, token)
+        run: |
+          chmod +x scripts/check.sh
+          ./scripts/check.sh .
+
+      - name: Cek sintaks server
+        run: node --check server.js
