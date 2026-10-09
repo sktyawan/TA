@@ -304,19 +304,44 @@ function pushRoomMessage(fromName, toName, text) {
   return msg;
 }
 
-const PROPOSALS = [
-  { agent: 'Sari', skill: 'hr-admin', title: 'Otomatisasi peringatan H-30 kontrak PKWT', status: 'approved' },
-  { agent: 'Dinda', skill: 'upwork-freelance', title: 'Template scoring kelayakan job posting Upwork', status: 'approved' },
-  { agent: 'Rina', skill: 'personal-branding', title: 'Playbook konsistensi profil GitHub-LinkedIn-X', status: 'approved' },
-  { agent: 'Siti', skill: 'excel-mastery', title: 'Checklist audit kualitas data otomatis', status: 'approved' },
-  { agent: 'Citra', skill: 'instagram-creator', title: 'Bank formula hook Reels 0-3 detik', status: 'approved' },
-  { agent: 'Maya', skill: 'youtube-creator', title: 'Workflow repurpose video panjang ke Shorts', status: 'approved' },
-  { agent: 'Zahra', skill: 'tiktok-creator', title: 'Metode A/B testing 3 varian hook FYP', status: 'approved' },
-  { agent: 'Dewi', skill: 'facebook-creator', title: 'Kerangka long-form storytelling komunitas', status: 'approved' },
-  { agent: 'Dira', skill: 'fullstack-dev', title: 'Standarisasi response JSON & validasi endpoint', status: 'approved' },
-  { agent: 'Fitri', skill: 'desain-3d', title: 'Checklist QA lighting & render produk 3D', status: 'approved' },
-  { agent: 'Hermes Mesh', skill: 'multi-agent-orchestration', title: 'Orkestrasi Multi-Agent, Dekomposisi Task & Protocol Routing', status: 'active' }
+const PROPOSALS_SEED = [
+  { id: 'prop-1', agent: 'Sari', skill: 'hr-admin', title: 'Otomatisasi peringatan H-30 kontrak PKWT', status: 'approved' },
+  { id: 'prop-2', agent: 'Dinda', skill: 'upwork-freelance', title: 'Template scoring kelayakan job posting Upwork', status: 'approved' },
+  { id: 'prop-3', agent: 'Rina', skill: 'personal-branding', title: 'Playbook konsistensi profil GitHub-LinkedIn-X', status: 'approved' },
+  { id: 'prop-4', agent: 'Siti', skill: 'excel-mastery', title: 'Checklist audit kualitas data otomatis', status: 'approved' },
+  { id: 'prop-5', agent: 'Citra', skill: 'instagram-creator', title: 'Bank formula hook Reels 0-3 detik', status: 'approved' },
+  { id: 'prop-6', agent: 'Maya', skill: 'youtube-creator', title: 'Workflow repurpose video panjang ke Shorts', status: 'approved' },
+  { id: 'prop-7', agent: 'Zahra', skill: 'tiktok-creator', title: 'Metode A/B testing 3 varian hook FYP', status: 'approved' },
+  { id: 'prop-8', agent: 'Dewi', skill: 'facebook-creator', title: 'Kerangka long-form storytelling komunitas', status: 'approved' },
+  { id: 'prop-9', agent: 'Dira', skill: 'fullstack-dev', title: 'Standarisasi response JSON & validasi endpoint', status: 'approved' },
+  { id: 'prop-10', agent: 'Fitri', skill: 'desain-3d', title: 'Checklist QA lighting & render produk 3D', status: 'approved' },
+  { id: 'prop-11', agent: 'Hermes Mesh', skill: 'multi-agent-orchestration', title: 'Orkestrasi Multi-Agent, Dekomposisi Task & Protocol Routing', status: 'active' }
 ];
+// ===== PERSISTENSI DISK: state penting selamat dari restart server =====
+const DATA_DIR = path.join(__dirname, 'data');
+function loadState(file, fallback) {
+  try {
+    const p = path.join(DATA_DIR, file);
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch (e) { console.warn(`Gagal memuat ${file}, pakai bawaan.`); }
+  return fallback;
+}
+function saveState(file, data) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
+  } catch (e) { console.warn(`Gagal menyimpan ${file}:`, e.message); }
+}
+// Muat proposal dari disk bila ada (selamat dari restart); kalau belum ada, pakai seed lalu simpan.
+let PROPOSALS = loadState('proposals.json', null);
+if (!Array.isArray(PROPOSALS)) {
+  PROPOSALS = PROPOSALS_SEED;
+  saveState('proposals.json', PROPOSALS);
+}
+let SKILL_PROPOSAL_SEQ = PROPOSALS.reduce((m, p) => {
+  const n = parseInt(String(p.id || '').split('-')[1], 10);
+  return isNaN(n) ? m : Math.max(m, n);
+}, 100);
 
 // 9ROUTER API GATEWAY STATE
 const ROUTER_KEYS = [
@@ -849,7 +874,11 @@ app.get('/api/spec', (req, res) => {
       { path: '/api/proposals', method: 'GET', description: 'Skill improvement proposals' },
       { path: '/api/agents/:id/chat', method: 'GET', description: 'Retrieve conversation history for an agent' },
       { path: '/api/agents/:id/memory', method: 'GET', description: 'Retrieve memory bank for an agent' },
+      { path: '/api/skills', method: 'GET', description: 'List skill bank (name, version, updatedAt)' },
       { path: '/api/skills/:skillName', method: 'GET', description: 'Download Markdown definition of a skill' },
+      { path: '/api/skills/:skillName/versions', method: 'GET', description: 'Version history of a skill' },
+      { path: '/api/skills/:skillName/proposals', method: 'POST', description: 'Agent submits a skill improvement proposal' },
+      { path: '/api/proposals/:id', method: 'PUT', description: 'Approve/reject a proposal (approved = new skill version)' },
       { path: '/api/webhook/dispatch', method: 'POST', description: 'Dispatch webhook event to Hermes mesh' },
       { path: '/api/room/message', method: 'POST', description: 'Send a validated message to the inter-agent mesh' }
     ]
@@ -873,6 +902,121 @@ app.get('/api/room', (req, res) => {
 
 app.get('/api/proposals', (req, res) => {
   res.json({ proposals: PROPOSALS });
+});
+
+// ===== SKILL BANK: agent membaca, mengusulkan, dan mempelajari update skill =====
+const SKILL_DIR = path.join(__dirname, 'skills');
+const SKILL_NAME_RE = /^[a-z0-9][a-z0-9_-]*$/i; // cegah path traversal (../, /, dll)
+const validSkillName = (n) => typeof n === 'string' && SKILL_NAME_RE.test(n) && n.length <= 64;
+
+function loadSkillRegistry() {
+  const reg = {};
+  if (!fs.existsSync(SKILL_DIR)) return reg;
+  for (const name of fs.readdirSync(SKILL_DIR)) {
+    if (!validSkillName(name)) continue;
+    const mdPath = path.join(SKILL_DIR, name, 'SKILL.md');
+    if (!fs.existsSync(mdPath)) continue;
+    let meta = { version: 1, updatedAt: fs.statSync(mdPath).mtime.toISOString(), history: [] };
+    const metaPath = path.join(SKILL_DIR, name, 'meta.json');
+    if (fs.existsSync(metaPath)) {
+      try { meta = { ...meta, ...JSON.parse(fs.readFileSync(metaPath, 'utf-8')) }; } catch (e) { /* pakai default */ }
+    }
+    reg[name] = { name, version: meta.version, updatedAt: meta.updatedAt, history: meta.history || [] };
+  }
+  return reg;
+}
+let SKILL_REGISTRY = loadSkillRegistry();
+
+function saveSkillMeta(name) {
+  const metaPath = path.join(SKILL_DIR, name, 'meta.json');
+  const m = SKILL_REGISTRY[name];
+  fs.writeFileSync(metaPath, JSON.stringify({ version: m.version, updatedAt: m.updatedAt, history: m.history }, null, 2));
+}
+
+// GET /api/skills — daftar bank skill (nama, versi, kapan diupdate)
+app.get('/api/skills', (req, res) => {
+  res.json({ skills: Object.values(SKILL_REGISTRY) });
+});
+
+// GET /api/skills/:skillName — baca isi SKILL.md (sudah divalidasi, anti path traversal)
+app.get('/api/skills/:skillName', (req, res) => {
+  const name = req.params.skillName;
+  if (!validSkillName(name)) return res.status(400).json({ error: 'Invalid skill name' });
+  const skillPath = path.join(SKILL_DIR, name, 'SKILL.md');
+  if (fs.existsSync(skillPath)) {
+    res.type('text/markdown').send(fs.readFileSync(skillPath, 'utf-8'));
+  } else {
+    res.status(404).json({ error: 'Skill not found' });
+  }
+});
+
+// GET /api/skills/:skillName/versions — riwayat versi skill
+app.get('/api/skills/:skillName/versions', (req, res) => {
+  const name = req.params.skillName;
+  if (!validSkillName(name) || !SKILL_REGISTRY[name]) return res.status(404).json({ error: 'Skill not found' });
+  res.json({ skill: name, version: SKILL_REGISTRY[name].version, history: SKILL_REGISTRY[name].history });
+});
+
+// POST /api/skills/:skillName/proposals — agent mengajukan perbaikan skill
+app.post('/api/skills/:skillName/proposals', (req, res) => {
+  const name = req.params.skillName;
+  if (!validSkillName(name) || !SKILL_REGISTRY[name]) return res.status(404).json({ error: 'Skill not found' });
+  const { agent, title, changes, reason } = req.body || {};
+  if (!findAgent(agent)) return res.status(400).json({ error: 'agent tidak dikenal (harus salah satu dari 10 agent)' });
+  if (typeof title !== 'string' || !title.trim() || title.length > 200)
+    return res.status(400).json({ error: 'title wajib diisi (maks 200 karakter)' });
+  if (typeof changes !== 'string' || !changes.trim() || changes.length > 200000)
+    return res.status(400).json({ error: 'changes wajib diisi (isi SKILL.md baru, maks 200KB)' });
+  const proposal = {
+    id: 'prop-' + (++SKILL_PROPOSAL_SEQ),
+    agent, skill: name,
+    title: title.trim(),
+    changes,
+    reason: typeof reason === 'string' ? reason.slice(0, 1000) : '',
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+  PROPOSALS.unshift(proposal);
+  saveState('proposals.json', PROPOSALS);
+  LOGS.unshift(`Skill_${new Date().toISOString().split('T')[0]}_proposal_${proposal.id}_pending.log`);
+  res.status(201).json({ proposal });
+});
+
+// PUT /api/proposals/:id — setujui / tolak usulan (yang disetujui langsung jadi versi baru)
+app.put('/api/proposals/:id', (req, res) => {
+  const p = PROPOSALS.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'Proposal not found' });
+  const { status, note } = req.body || {};
+  if (!['approved', 'rejected'].includes(status))
+    return res.status(400).json({ error: "status harus 'approved' atau 'rejected'" });
+  if (p.status !== 'pending')
+    return res.status(409).json({ error: `proposal sudah ${p.status}` });
+  p.status = status;
+  p.reviewedAt = new Date().toISOString();
+  if (note) p.reviewNote = String(note).slice(0, 500);
+
+  if (status === 'approved' && p.changes) {
+    // arsipkan versi lama, tulis versi baru, naikkan nomor versi
+    const dir = path.join(SKILL_DIR, p.skill);
+    const mdPath = path.join(dir, 'SKILL.md');
+    const histDir = path.join(dir, 'history');
+    fs.mkdirSync(histDir, { recursive: true });
+    const oldVersion = SKILL_REGISTRY[p.skill].version;
+    fs.writeFileSync(path.join(histDir, `v${oldVersion}-${Date.now()}.md`), fs.readFileSync(mdPath, 'utf-8'));
+    fs.writeFileSync(mdPath, p.changes);
+    SKILL_REGISTRY[p.skill].version = oldVersion + 1;
+    SKILL_REGISTRY[p.skill].updatedAt = new Date().toISOString();
+    SKILL_REGISTRY[p.skill].history.unshift({
+      version: oldVersion + 1, proposalId: p.id, agent: p.agent,
+      title: p.title, at: SKILL_REGISTRY[p.skill].updatedAt
+    });
+    saveSkillMeta(p.skill);
+    LOGS.unshift(`Skill_${new Date().toISOString().split('T')[0]}_${p.skill}_v${oldVersion + 1}_approved.log`);
+  } else {
+    LOGS.unshift(`Skill_${new Date().toISOString().split('T')[0]}_proposal_${p.id}_rejected.log`);
+  }
+  saveState('proposals.json', PROPOSALS);
+  res.json({ proposal: p });
 });
 
 // CRON SCHEDULER STATE
@@ -1174,15 +1318,6 @@ app.get('/api/agents/:id/memory', (req, res) => {
     return res.status(404).json({ memory: '' });
   }
   res.json({ memory: agent.memory.join('\n') });
-});
-
-app.get('/api/skills/:skillName', (req, res) => {
-  const skillPath = path.join(__dirname, 'skills', req.params.skillName, 'SKILL.md');
-  if (fs.existsSync(skillPath)) {
-    res.type('text/markdown').send(fs.readFileSync(skillPath, 'utf-8'));
-  } else {
-    res.status(404).json({ error: 'Skill not found' });
-  }
 });
 
 // Serve static files from kpi-dashboard

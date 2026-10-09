@@ -94,6 +94,7 @@
       <span class="text-slate-600">·</span>
       <a href="#orchestrator" class="hover:text-emerald-400 transition-colors">Orkestrasi Engine</a>
       <span class="text-slate-600">·</span>
+      <a href="#skill-bank" class="hover:text-slate-200 transition-colors">Bank Skill</a>
       <a href="#proposals" class="hover:text-slate-200 transition-colors">Usulan Skill</a>
       <span class="text-slate-600">·</span>
       <a href="#api-setup" class="hover:text-cyan-400 transition-colors">Setup API</a>
@@ -790,6 +791,28 @@
   </section>
 
   <!-- SKILLS AND PROPOSALS OVERVIEW SECTION -->
+  <section id="skill-bank" class="max-w-[1700px] w-full mx-auto px-6 pb-12">
+    <div class="bg-panel border border-slate-800/85 rounded-xl p-6 relative overflow-hidden">
+      <div class="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-cyan-500 to-transparent"></div>
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+        <div>
+          <h3 class="font-display text-lg font-bold text-white tracking-wide">Bank Skill</h3>
+          <p class="text-xs text-slate-500">Skill yang bisa dibaca agent — klik untuk melihat isi &amp; riwayat versi.</p>
+        </div>
+        <button onclick="loadSkills()" class="px-3 py-1.5 text-xs font-display font-semibold uppercase text-cyan-400 border border-cyan-500/30 hover:border-cyan-400 bg-cyan-950/20 hover:bg-cyan-500/10 rounded transition-all shrink-0">&#x1F504; Muat Ulang</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="skills-container"></div>
+      <div id="skill-viewer" class="hidden mt-5 bg-obsidian/60 border border-slate-800/80 rounded-lg p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 id="skill-viewer-title" class="font-display font-bold text-sm text-white"></h4>
+          <button onclick="closeSkillViewer()" class="px-2 py-1 text-[10px] font-mono text-slate-400 border border-slate-700 rounded hover:text-white">Tutup &#x2715;</button>
+        </div>
+        <div id="skill-viewer-versions" class="text-[10px] font-mono text-slate-500 mb-3"></div>
+        <pre id="skill-viewer-body" class="text-[11px] text-slate-300 font-mono whitespace-pre-wrap max-h-[420px] overflow-y-auto leading-relaxed"></pre>
+      </div>
+    </div>
+  </section>
+
   <section id="proposals" class="max-w-[1700px] w-full mx-auto px-6 pb-12">
     <div class="bg-panel border border-slate-800/85 rounded-xl p-6 relative overflow-hidden">
       <div class="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-purple-500 to-transparent"></div>
@@ -797,6 +820,17 @@
       <div class="mb-5">
         <h3 class="font-display text-lg font-bold text-white tracking-wide">Peningkatan Skill & Usulan Standarisasi</h3>
         <p class="text-xs text-slate-500">Status persetujuan usulan standardisasi operasional dan integrasi sistem baru dari masing-masing agen.</p>
+      </div>
+      <div class="bg-obsidian/40 border border-slate-800/80 rounded-lg p-4 mb-5">
+        <h4 class="text-xs font-display font-bold uppercase tracking-wider text-slate-300 mb-3">&#xFF0B; Ajukan Usulan Skill</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+          <select id="prop-skill" class="bg-obsidian border border-slate-700 rounded px-3 py-2 text-xs text-slate-200"></select>
+          <input id="prop-agent" placeholder="Nama agent (cth: Dira)" class="bg-obsidian border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600" />
+        </div>
+        <input id="prop-title" placeholder="Judul usulan (maks 200 karakter)" maxlength="200" class="w-full bg-obsidian border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 mb-3" />
+        <textarea id="prop-changes" rows="4" placeholder="Isi SKILL.md BARU versi lengkap (akan menjadi versi baru saat disetujui)" class="w-full bg-obsidian border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200 placeholder:text-slate-600 mb-3"></textarea>
+        <input id="prop-reason" placeholder="Alasan perubahan (opsional)" class="w-full bg-obsidian border border-slate-700 rounded px-3 py-2 text-xs text-slate-200 placeholder:text-slate-600 mb-3" />
+        <button onclick="submitProposal()" class="px-4 py-2 text-xs font-display font-semibold uppercase text-emerald-400 border border-emerald-500/30 hover:border-emerald-400 bg-emerald-950/20 hover:bg-emerald-500/10 rounded transition-all">Kirim Usulan</button>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="proposals-container">
@@ -908,7 +942,10 @@
       { method: 'GET', path: '/api/agents', desc: 'Retrieve list of all 10 Hermes agents' },
       { method: 'GET', path: '/api/logs', desc: 'Retrieve system action logs' },
       { method: 'GET', path: '/api/room', desc: 'Retrieve inter-agent mesh messages' },
+      { method: 'GET', path: '/api/skills', desc: 'List skill bank (name, version, updatedAt)' },
       { method: 'GET', path: '/api/proposals', desc: 'Retrieve skill proposals' },
+      { method: 'POST', path: '/api/skills/:name/proposals', desc: 'Agent submits skill improvement proposal' },
+      { method: 'PUT', path: '/api/proposals/:id', desc: 'Approve/reject proposal (approved = new version)' },
       { method: 'GET', path: '/api/agents/sari/chat', desc: 'Retrieve conversation history for Sari' },
       { method: 'GET', path: '/api/agents/sari/memory', desc: 'Retrieve memory bank for Sari' },
       { method: 'GET', path: '/api/skills/hr-admin', desc: 'Retrieve raw SKILL.md definition' },
@@ -1012,6 +1049,17 @@
       return res.json();
     }
 
+    // FETCH API HELPER (POST/PUT dengan JSON body)
+    async function apix(path, method, body) {
+      const headers = { 'Content-Type': 'application/json' };
+      const token = localStorage.getItem('dash_token');
+      if (token) headers['x-token'] = token;
+      const res = await fetch('/api/' + path, { method, headers, body: JSON.stringify(body || {}) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || (path + ' \u2192 ' + res.status));
+      return data;
+    }
+
     // MAIN LOADER
     async function load() {
       const errLog = document.getElementById('err-log');
@@ -1033,6 +1081,7 @@
         LOGS = await api('logs').then(r => r.logs || []);
         ROOM = await api('room').then(r => r.room || []);
         PROPOSALS = await api('proposals').then(r => r.proposals || []);
+        loadSkills();
 
         // Calculate active telemetry counts using original immutable names to prevent customized name breakdown bugs
         ACT = {};
@@ -1357,24 +1406,116 @@
       const container = document.getElementById('proposals-container');
       container.innerHTML = '';
 
+      const statusStyle = {
+        pending: 'text-amber-400 border-amber-500/20 bg-amber-500/5',
+        approved: 'text-emerald-400 border-emerald-500/20 bg-emerald-500/5',
+        rejected: 'text-rose-400 border-rose-500/20 bg-rose-500/5',
+        active: 'text-cyan-400 border-cyan-500/20 bg-cyan-500/5'
+      };
+
       PROPOSALS.forEach(p => {
         const card = document.createElement('div');
         card.className = 'bg-obsidian/40 border border-slate-800/80 rounded-lg p-4 flex flex-col justify-between gap-3';
-        
+        const st = statusStyle[p.status] || statusStyle.active;
+        const actions = p.status === 'pending' ? `
+          <div class="flex gap-2 mt-1">
+            <button onclick="reviewProposal('${p.id}','approved')" class="flex-1 px-2 py-1.5 text-[10px] font-bold uppercase text-emerald-400 border border-emerald-500/30 rounded hover:bg-emerald-500/10">✓ Setujui</button>
+            <button onclick="reviewProposal('${p.id}','rejected')" class="flex-1 px-2 py-1.5 text-[10px] font-bold uppercase text-rose-400 border border-rose-500/30 rounded hover:bg-rose-500/10">✕ Tolak</button>
+          </div>` : '';
         card.innerHTML = `
           <div>
             <div class="flex items-center justify-between gap-2 mb-2">
               <span class="font-display font-bold text-xs uppercase tracking-wide text-cyan-400">${p.agent}</span>
-              <span class="text-[9px] font-mono uppercase text-emerald-400 border border-emerald-500/20 bg-emerald-500/5 px-2 py-0.5 rounded">
-                ${p.status}
-              </span>
+              <span class="text-[9px] font-mono uppercase border px-2 py-0.5 rounded ${st}">${p.status}</span>
             </div>
             <p class="text-xs text-slate-300 font-medium line-clamp-2 leading-relaxed mb-1">${p.title}</p>
-            <p class="text-[10px] text-slate-500 font-mono">Skill referensi: ${p.skill}</p>
+            <p class="text-[10px] text-slate-500 font-mono">Skill: ${p.skill}${p.reason ? ' · ' + p.reason.slice(0, 80) : ''}</p>
           </div>
+          ${actions}
         `;
         container.appendChild(card);
       });
+    }
+
+    // ===== SKILL BANK UI =====
+    let SKILLS = [];
+    async function loadSkills() {
+      try {
+        SKILLS = await api('skills').then(r => r.skills || []);
+        renderSkills();
+      } catch (e) { console.warn('loadSkills:', e.message); }
+    }
+    function renderSkills() {
+      const container = document.getElementById('skills-container');
+      if (!container) return;
+      container.innerHTML = '';
+      const sel = document.getElementById('prop-skill');
+      if (sel) sel.innerHTML = '';
+      SKILLS.forEach(s => {
+        if (sel) {
+          const o = document.createElement('option');
+          o.value = s.name; o.textContent = s.name;
+          sel.appendChild(o);
+        }
+        const card = document.createElement('div');
+        card.className = 'bg-obsidian/40 border border-slate-800/80 rounded-lg p-4 flex flex-col justify-between gap-3';
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="font-display font-bold text-xs uppercase tracking-wide text-cyan-400">${s.name}</span>
+              <span class="text-[9px] font-mono text-slate-400 border border-slate-700 px-2 py-0.5 rounded">v${s.version}</span>
+            </div>
+            <p class="text-[10px] text-slate-500 font-mono">Update: ${s.updatedAt ? new Date(s.updatedAt).toLocaleString('id-ID') : '-'}</p>
+          </div>
+          <button onclick="viewSkill('${s.name}')" class="px-2 py-1.5 text-[10px] font-bold uppercase text-cyan-400 border border-cyan-500/30 rounded hover:bg-cyan-500/10">📖 Baca Skill</button>
+        `;
+        container.appendChild(card);
+      });
+    }
+    async function viewSkill(name) {
+      try {
+        const headers = localStorage.getItem('dash_token') ? { 'x-token': localStorage.getItem('dash_token') } : {};
+        const res = await fetch('/api/skills/' + encodeURIComponent(name), { headers });
+        const text = await res.text();
+        document.getElementById('skill-viewer-title').textContent = name + ' — SKILL.md';
+        document.getElementById('skill-viewer-body').textContent = text.slice(0, 30000);
+        const v = await api('skills/' + encodeURIComponent(name) + '/versions').catch(() => null);
+        document.getElementById('skill-viewer-versions').textContent = v
+          ? `Versi saat ini: v${v.version} · Riwayat: ${v.history.length ? v.history.map(h => 'v' + h.version + ' (' + h.title.slice(0, 40) + ')').join(', ') : 'belum ada update'}`
+          : '';
+        document.getElementById('skill-viewer').classList.remove('hidden');
+        document.getElementById('skill-viewer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (e) { alert('Gagal membaca skill: ' + e.message); }
+    }
+    function closeSkillViewer() {
+      document.getElementById('skill-viewer').classList.add('hidden');
+    }
+    async function submitProposal() {
+      const skill = document.getElementById('prop-skill').value;
+      const agent = document.getElementById('prop-agent').value.trim();
+      const title = document.getElementById('prop-title').value.trim();
+      const changes = document.getElementById('prop-changes').value;
+      const reason = document.getElementById('prop-reason').value.trim();
+      if (!skill || !agent || !title || !changes.trim()) { alert('Lengkapi: skill, agent, judul, dan isi SKILL.md baru.'); return; }
+      try {
+        const r = await apix('skills/' + encodeURIComponent(skill) + '/proposals', 'POST', { agent, title, changes, reason });
+        alert('Usulan terkirim: ' + r.proposal.id + ' (pending)');
+        document.getElementById('prop-title').value = '';
+        document.getElementById('prop-changes').value = '';
+        document.getElementById('prop-reason').value = '';
+        PROPOSALS = await api('proposals').then(r => r.proposals || []);
+        renderProposals();
+      } catch (e) { alert('Gagal: ' + e.message); }
+    }
+    async function reviewProposal(id, status) {
+      if (!confirm((status === 'approved' ? 'Setujui' : 'Tolak') + ' usulan ' + id + '?')) return;
+      try {
+        await apix('proposals/' + encodeURIComponent(id), 'PUT', { status });
+        PROPOSALS = await api('proposals').then(r => r.proposals || []);
+        renderProposals();
+        loadSkills();
+        alert('Usulan ' + id + ' → ' + status);
+      } catch (e) { alert('Gagal: ' + e.message); }
     }
 
     // SETUP API FUNCTIONS
