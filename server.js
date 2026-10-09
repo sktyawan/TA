@@ -78,7 +78,7 @@ if (!DASH_TOKEN) {
   console.warn('[AUTH] PERINGATAN: DASH_TOKEN kosong — halaman login akan menolak semua upaya masuk sampai token diset.');
 }
 
-// In-memory mock data representing the 10 Hermes Agents & their skills from /skills/*
+// In-memory mock data representing the Hermes Agents & their skills from /skills/*
 const AGENTS = [
   {
     id: 'sari',
@@ -244,6 +244,24 @@ const AGENTS = [
       '- Struktur komponen UI wajib menggunakan design tokens konsisten dan auto-layout.',
       '- Deliverable desain selalu dicek kontras keterbacaan, resolusi, dan color space (sRGB untuk digital).'
     ]
+  },
+  {
+    id: 'rani',
+    name: 'Rani',
+    role: 'Content Analyst — Analisis performa konten, riset tren & umpan balik perbaikan skill (content-analyst)',
+    skill: 'content-analyst',
+    skillPath: '/skills/content-analyst/SKILL.md',
+    chats: [
+      { role: 'user', content: 'Analisis 12 video TikTok terakhir, kenapa 3 terakhir sepi?' },
+      { role: 'assistant', content: 'Completion rate 3 video terakhir 28-31% vs baseline 42% — pola: hook pernyataan vs hook pertanyaan di 9 video sebelumnya. Hipotesis + usulan update skill tiktok-creator terkirim.' },
+      { role: 'user', content: 'Riset tren minggu ini untuk niche edukasi AI.' },
+      { role: 'assistant', content: 'Brief riset: 3 tren relevan dengan angle adaptasi, contoh referensi, dan estimasi effort produksi 48 jam.' }
+    ],
+    memory: [
+      '- Baseline performa selalu dari 10 konten terakhir akun sendiri, bukan akun orang lain.',
+      '- Pola valid minimal muncul 3 kali; sinyal = selisih >20% dari baseline.',
+      '- Setiap temuan wajib menjadi aksi: usulan skill atau rekomendasi ke agent creator.'
+    ]
   }
 ];
 
@@ -391,7 +409,7 @@ const SOCIAL_ACCOUNTS = [
 // MULTI-AGENT ORCHESTRATION ENGINE
 // Logika inti diekstrak jadi fungsi reusable agar bisa dipanggil dari HTTP maupun cron runner.
 function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
-  const userGoal = goal || 'Eksekusi kolaborasi terintegrasi antar 10 Hermes Agents';
+  const userGoal = goal || 'Eksekusi kolaborasi terintegrasi antar Hermes Agents';
 
   // Selected or active agents
   const selectedAgentIds = Array.isArray(agentIds) && agentIds.length > 0
@@ -812,7 +830,7 @@ app.post('/api/webhook/dispatch', (req, res) => {
   // Validasi: pengirim harus agent yang terdaftar
   const sender = findAgent(agent);
   if (!sender) {
-    return res.status(400).json({ error: `Unknown agent '${agent}' — pengirim harus salah satu dari 10 Hermes agents` });
+    return res.status(400).json({ error: `Unknown agent '${agent}' — pengirim harus salah satu dari ${AGENTS.length} Hermes agents` });
   }
 
   const logEntry = `${sender.name}_${new Date().toISOString().split('T')[0]}_${action}.log`;
@@ -868,7 +886,7 @@ app.get('/api/spec', (req, res) => {
     info: { title: 'HERMES Agent Control Center API', version: '3.8.0' },
     endpoints: [
       { path: '/api/health', method: 'GET', description: 'System health & uptime monitor' },
-      { path: '/api/agents', method: 'GET', description: 'List all 10 Hermes agents' },
+      { path: '/api/agents', method: 'GET', description: 'List all Hermes agents' },
       { path: '/api/logs', method: 'GET', description: 'Retrieve system action logs' },
       { path: '/api/room', method: 'GET', description: 'Inter-agent communication mesh history' },
       { path: '/api/proposals', method: 'GET', description: 'Skill improvement proposals' },
@@ -962,7 +980,7 @@ app.post('/api/skills/:skillName/proposals', (req, res) => {
   const name = req.params.skillName;
   if (!validSkillName(name) || !SKILL_REGISTRY[name]) return res.status(404).json({ error: 'Skill not found' });
   const { agent, title, changes, reason } = req.body || {};
-  if (!findAgent(agent)) return res.status(400).json({ error: 'agent tidak dikenal (harus salah satu dari 10 agent)' });
+  if (!findAgent(agent)) return res.status(400).json({ error: `agent tidak dikenal (harus salah satu dari ${AGENTS.length} agent)` });
   if (typeof title !== 'string' || !title.trim() || title.length > 200)
     return res.status(400).json({ error: 'title wajib diisi (maks 200 karakter)' });
   if (typeof changes !== 'string' || !changes.trim() || changes.length > 200000)

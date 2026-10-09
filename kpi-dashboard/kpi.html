@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HERMES Control Center — 10 Agent KPI Dashboard</title>
-  <meta name="description" content="Dashboard pemantauan aktivitas live dan pencatatan KPI bulanan untuk 10 Agent Hermes (HR Admin, Upwork Freelance, Personal Branding, Excel Mastery, Content Creators, Full-Stack Dev, dan 3D Design).">
-  <meta property="og:title" content="HERMES Control Center — 10 Agent KPI Dashboard">
-  <meta property="og:description" content="Dashboard pemantauan aktivitas live dan pencatatan KPI bulanan untuk 10 Agent Hermes (HR Admin, Upwork Freelance, Personal Branding, Excel Mastery, Content Creators, Full-Stack Dev, dan 3D Design).">
+  <title>HERMES Control Center — 11 Agent KPI Dashboard</title>
+  <meta name="description" content="Dashboard pemantauan aktivitas live dan pencatatan KPI bulanan untuk 11 Agent Hermes (HR Admin, Upwork Freelance, Personal Branding, Excel Mastery, Content Creators, Full-Stack Dev, 3D Design, dan Content Analyst).">
+  <meta property="og:title" content="HERMES Control Center — 11 Agent KPI Dashboard">
+  <meta property="og:description" content="Dashboard pemantauan aktivitas live dan pencatatan KPI bulanan untuk 11 Agent Hermes (HR Admin, Upwork Freelance, Personal Branding, Excel Mastery, Content Creators, Full-Stack Dev, 3D Design, dan Content Analyst).">
   
   <!-- Tailwind CSS & Font Integration -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -275,7 +275,7 @@
                 ● TASK DECOMPOSITION & DAG ROUTING
               </span>
             </div>
-            <p class="text-xs text-slate-400">Dekomposisi tugas secara otomatis dan salurkan eksekusi antar ke-10 Hermes Agents secara beruntun (*Directed Acyclic Graph*).</p>
+            <p class="text-xs text-slate-400">Dekomposisi tugas secara otomatis dan salurkan eksekusi antar ke-11 Hermes Agents secara beruntun (*Directed Acyclic Graph*).</p>
           </div>
 
           <div class="flex items-center gap-2">
@@ -326,7 +326,7 @@
 
             <div id="orch-steps-container" class="space-y-3 overflow-y-auto max-h-[300px] pr-1">
               <div class="p-6 text-center text-xs text-slate-500 font-mono border border-dashed border-slate-800/80 rounded-lg">
-                Pilihlah preset atau masukkan goal di sebelah kiri, lalu klik "Execute" untuk memulai eksekusi DAG 10 Hermes Agents...
+                Pilihlah preset atau masukkan goal di sebelah kiri, lalu klik "Execute" untuk memulai eksekusi DAG 11 Hermes Agents...
               </div>
             </div>
           </div>
@@ -601,7 +601,7 @@
         <div class="flex items-center justify-between">
           <div>
             <h4 class="text-xs font-display uppercase tracking-wider text-slate-300 font-semibold">Matrix Routing Model Agent (9Router Failover Engine)</h4>
-            <p class="text-[11px] text-slate-500">Konfigurasi pasangan model utama (*primary*) dan cadangan (*fallback*) untuk ke-10 Agent Hermes.</p>
+            <p class="text-[11px] text-slate-500">Konfigurasi pasangan model utama (*primary*) dan cadangan (*fallback*) untuk ke-11 Agent Hermes.</p>
           </div>
           <button onclick="loadRouterRoutes()" class="px-3 py-1 text-[11px] font-display text-cyan-400 hover:text-cyan-300">
             🔄 Refresh Matrix
@@ -852,7 +852,7 @@
               ● MULTI-PLATFORM OAUTH
             </span>
           </div>
-          <p class="text-xs text-slate-400">Hubungkan Akun Google utama Anda serta kanal medsos (YouTube, Instagram, TikTok, Facebook, Upwork, GitHub, Behance) ke 10 Agent Hermes.</p>
+          <p class="text-xs text-slate-400">Hubungkan Akun Google utama Anda serta kanal medsos (YouTube, Instagram, TikTok, Facebook, Upwork, GitHub, Behance) ke 11 Agent Hermes.</p>
         </div>
 
         <button onclick="loadSocialAccounts()" class="px-3 py-1.5 text-xs font-display font-semibold uppercase text-amber-400 border border-amber-500/30 hover:border-amber-400 bg-amber-950/20 hover:bg-amber-500/10 rounded transition-all shrink-0">
@@ -923,7 +923,7 @@
       "fitri": [["Konsep desain",12],["Komponen design system",30],["Brand asset",8]],
     };
 
-    // HIGH FIDELITY GENERATED DEFAULT AVATARS FOR ALL 10 AGENTS
+    // HIGH FIDELITY GENERATED DEFAULT AVATARS (fallback SVG initials untuk agent tanpa avatar)
     const DEFAULT_AVATARS = {
       "sari": "/src/assets/images/avatar_professional_sari_1791272298419.jpg",
       "dinda": "/src/assets/images/avatar_freelance_dinda_1791272947893.jpg",
@@ -939,7 +939,7 @@
 
     const ENDPOINTS_SPEC = [
       { method: 'GET', path: '/api/health', desc: 'System health, uptime & status check' },
-      { method: 'GET', path: '/api/agents', desc: 'Retrieve list of all 10 Hermes agents' },
+      { method: 'GET', path: '/api/agents', desc: 'Retrieve list of all Hermes agents' },
       { method: 'GET', path: '/api/logs', desc: 'Retrieve system action logs' },
       { method: 'GET', path: '/api/room', desc: 'Retrieve inter-agent mesh messages' },
       { method: 'GET', path: '/api/skills', desc: 'List skill bank (name, version, updatedAt)' },
