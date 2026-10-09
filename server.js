@@ -8,6 +8,22 @@ import { GoogleGenAI } from '@google/genai';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ===== PERSISTENSI DISK: state penting selamat dari restart server =====
+const DATA_DIR = path.join(__dirname, 'data');
+function loadState(file, fallback) {
+  try {
+    const p = path.join(DATA_DIR, file);
+    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf-8'));
+  } catch (e) { console.warn(`Gagal memuat ${file}, pakai bawaan.`); }
+  return fallback;
+}
+function saveState(file, data) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
+  } catch (e) { console.warn(`Gagal menyimpan ${file}:`, e.message); }
+}
+
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
   httpOptions: {
@@ -23,7 +39,14 @@ app.use(express.json());
 // ===== AUTH: gerbang login sebelum dashboard =====
 // Token diambil dari env DASH_TOKEN (lihat .env.example). Tanpa ini, login ditolak.
 const DASH_TOKEN = process.env.DASH_TOKEN || '';
-const sessions = new Set(); // session id aktif (in-memory, konsisten dengan state lain di file ini)
+const sessions = new Set(
+  (loadState('sessions.json', []) || [])
+    .filter(s => s && s.id && Date.now() - new Date(s.createdAt).getTime() < 24 * 3600 * 1000)
+    .map(s => s.id)
+); // session id aktif — dipersist ke data/sessions.json
+function saveSessions() {
+  saveState('sessions.json', [...sessions].map(id => ({ id, createdAt: new Date().toISOString() })));
+}
 
 function getSessionId(req) {
   const m = (req.headers.cookie || '').match(/hermes_session=([a-f0-9]{64})/);
@@ -58,6 +81,7 @@ app.post('/api/auth/login', (req, res) => {
   if (token && token === DASH_TOKEN) {
     const sid = crypto.randomBytes(32).toString('hex');
     sessions.add(sid);
+    saveSessions();
     res.setHeader('Set-Cookie', `hermes_session=${sid}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
     return res.json({ success: true });
   }
@@ -66,7 +90,7 @@ app.post('/api/auth/login', (req, res) => {
 
 app.post('/api/auth/logout', (req, res) => {
   const sid = getSessionId(req);
-  if (sid) sessions.delete(sid);
+  if (sid) { sessions.delete(sid); saveSessions(); }
   res.setHeader('Set-Cookie', 'hermes_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
   res.json({ success: true });
 });
@@ -293,7 +317,7 @@ const LOGS = [
   'Fitri_2026-10-04_design_system_tokens.log'
 ];
 
-const ROOM_MESSAGES = [
+let ROOM_MESSAGES = loadState('room.json', null) || [
   { from: 'Sari', to: 'Siti', text: 'Siti, tolong cek formula XLOOKUP untuk rekonsiliasi sheet master karyawan vs Edabu.', ts: '2026-10-05T09:15:00Z' },
   { from: 'Siti', to: 'Sari', text: 'Sudah dicek Sari, kunci NIK sudah dinormalisasi pakai TEXT(TRIM()) agar 16 digit aman.', ts: '2026-10-05T09:22:00Z' },
   { from: 'Dinda', to: 'Rina', text: 'Rina, ada proyek dashboard baru yang selesai, yuk update di pinned GitHub dan post LinkedIn.', ts: '2026-10-05T11:00:00Z' },
@@ -319,6 +343,7 @@ function pushRoomMessage(fromName, toName, text) {
   const msg = { from: fromName, to: toName, text, ts: new Date().toISOString() };
   ROOM_MESSAGES.push(msg);
   if (ROOM_MESSAGES.length > 200) ROOM_MESSAGES.splice(0, ROOM_MESSAGES.length - 200);
+  saveState('room.json', ROOM_MESSAGES);
   return msg;
 }
 
@@ -335,21 +360,6 @@ const PROPOSALS_SEED = [
   { id: 'prop-10', agent: 'Fitri', skill: 'desain-3d', title: 'Checklist QA lighting & render produk 3D', status: 'approved' },
   { id: 'prop-11', agent: 'Hermes Mesh', skill: 'multi-agent-orchestration', title: 'Orkestrasi Multi-Agent, Dekomposisi Task & Protocol Routing', status: 'active' }
 ];
-// ===== PERSISTENSI DISK: state penting selamat dari restart server =====
-const DATA_DIR = path.join(__dirname, 'data');
-function loadState(file, fallback) {
-  try {
-    const p = path.join(DATA_DIR, file);
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf-8'));
-  } catch (e) { console.warn(`Gagal memuat ${file}, pakai bawaan.`); }
-  return fallback;
-}
-function saveState(file, data) {
-  try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(path.join(DATA_DIR, file), JSON.stringify(data, null, 2));
-  } catch (e) { console.warn(`Gagal menyimpan ${file}:`, e.message); }
-}
 // Muat proposal dari disk bila ada (selamat dari restart); kalau belum ada, pakai seed lalu simpan.
 let PROPOSALS = loadState('proposals.json', null);
 if (!Array.isArray(PROPOSALS)) {
@@ -362,18 +372,29 @@ let SKILL_PROPOSAL_SEQ = PROPOSALS.reduce((m, p) => {
 }, 100);
 
 // 9ROUTER API GATEWAY STATE
-const ROUTER_KEYS = [
+const ROUTER_KEYS_SEED = [
   { id: 'key_1', name: 'Hermes Production Key', key: '', rateLimit: 120, budget: 50.00, used: 4.82, active: true, created: '2026-10-01' },
   { id: 'key_2', name: 'Hermes Staging & Test Key', key: '', rateLimit: 60, budget: 10.00, used: 1.15, active: true, created: '2026-10-03' }
 ];
+let ROUTER_KEYS = loadState('router_keys.json', null);
+if (!Array.isArray(ROUTER_KEYS)) {
+  ROUTER_KEYS = ROUTER_KEYS_SEED;
+  saveState('router_keys.json', ROUTER_KEYS);
+}
+const saveRouterKeys = () => saveState('router_keys.json', ROUTER_KEYS);
 
-const ROUTER_PROVIDERS = [
+const ROUTER_PROVIDERS_SEED = [
   { id: 'gemini', name: 'Google Gemini AI', provider: 'google', apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'], status: 'active', latencyMs: 210, priority: 1 },
   { id: 'openai', name: 'OpenAI API', provider: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'], status: 'active', latencyMs: 340, priority: 2 },
   { id: 'anthropic', name: 'Anthropic Claude', provider: 'anthropic', apiKey: '', baseUrl: 'https://api.anthropic.com/v1', models: ['claude-3-5-sonnet', 'claude-3-haiku'], status: 'active', latencyMs: 290, priority: 3 },
   { id: 'deepseek', name: 'DeepSeek AI', provider: 'deepseek', apiKey: '', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'], status: 'active', latencyMs: 180, priority: 4 },
   { id: 'groq', name: 'Groq LPU Acceleration', provider: 'groq', apiKey: '', baseUrl: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'], status: 'active', latencyMs: 85, priority: 5 }
 ];
+let ROUTER_PROVIDERS = loadState('router_providers.json', null);
+if (!Array.isArray(ROUTER_PROVIDERS)) {
+  ROUTER_PROVIDERS = ROUTER_PROVIDERS_SEED;
+  saveState('router_providers.json', ROUTER_PROVIDERS);
+}
 
 const ROUTER_ROUTES = [
   { agentId: 'sari', agentName: 'Sari (HR Admin)', primaryModel: 'gemini-2.5-flash', fallbackModel: 'deepseek-chat', provider: 'google', temp: 0.2 },
@@ -405,22 +426,74 @@ const SOCIAL_ACCOUNTS = [
   { id: 'github', name: 'GitHub & Personal Brand', platform: 'GitHub', handle: '@sktyawan', agent: 'Rina & Dira', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '🐙' },
   { id: 'behance', name: 'Behance & 3D Portfolio', platform: 'Behance', handle: 'be.net/fitri3d', agent: 'Fitri', connected: false, status: 'Disconnected', token: '', icon: '🎨' }
 ];
+// Kembalikan token OAuth dari disk (selamat dari restart)
+try {
+  const savedTokens = loadState('social_tokens.json', {});
+  for (const acc of SOCIAL_ACCOUNTS) {
+    const t = savedTokens[acc.id];
+    if (t && t.token) {
+      acc.token = t.token;
+      acc.refreshToken = t.refreshToken || '';
+      acc.tokenExpiresAt = t.tokenExpiresAt || null;
+      acc.connected = true;
+      acc.status = t.status || acc.status;
+    }
+  }
+} catch (e) { /* abaikan */ }
+function saveSocialTokens() {
+  const out = {};
+  for (const acc of SOCIAL_ACCOUNTS) {
+    if (acc.token) out[acc.id] = { token: acc.token, refreshToken: acc.refreshToken, tokenExpiresAt: acc.tokenExpiresAt, status: acc.status };
+  }
+  saveState('social_tokens.json', out);
+}
 
 // MULTI-AGENT ORCHESTRATION ENGINE
 // Logika inti diekstrak jadi fungsi reusable agar bisa dipanggil dari HTTP maupun cron runner.
-function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
+// ===== BRAIN NYATA: hasilkan output step orkestrasi memakai AI bila GEMINI_API_KEY ada =====
+const BRAIN_ENABLED = !!process.env.GEMINI_API_KEY;
+function skillExcerpt(skillName, maxChars = 1500) {
+  try {
+    const p = path.join(SKILL_DIR, skillName, 'SKILL.md');
+    if (!fs.existsSync(p)) return '';
+    return fs.readFileSync(p, 'utf-8').slice(0, maxChars);
+  } catch (e) { return ''; }
+}
+async function generateStepWithAI(agent, userGoal, prevOutputs) {
+  const context = prevOutputs.length
+    ? '\nHasil step sebelumnya (jadikan acuan agar nyambung):\n' + prevOutputs.map((o, i) => `${i + 1}. [${o.agentName}] ${o.output.slice(0, 300)}`).join('\n')
+    : '\n(Ini step pertama — mulai dari tujuan di atas.)';
+  const prompt =
+    `Tujuan orkestrasi: "${userGoal}"\n` +
+    `Peranmu: ${agent.name} — ${agent.role}\n` +
+    `Ringkasan skill-mu:\n${skillExcerpt(agent.skill)}` +
+    context +
+    `\nTugasmu: tulis HASIL KERJA konkret untuk step ini dalam Bahasa Indonesia, maksimal 5 kalimat. ` +
+    `Jangan basa-basi, langsung ke deliverable yang bisa dieksekusi.`;
+  const r = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: { temperature: 0.7 }
+  });
+  const text = (r.text || '').trim();
+  if (!text) throw new Error('AI mengembalikan teks kosong');
+  return text;
+}
+
+async function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
   const userGoal = goal || 'Eksekusi kolaborasi terintegrasi antar Hermes Agents';
 
   // Selected or active agents
   const selectedAgentIds = Array.isArray(agentIds) && agentIds.length > 0
     ? agentIds
-    : ['sari', 'dinda', 'rina', 'siti', 'citra', 'maya', 'zahra', 'dewi', 'dira', 'fitri'];
+    : ['sari', 'dinda', 'rina', 'siti', 'citra', 'maya', 'zahra', 'dewi', 'dira', 'fitri', 'rani'];
 
   const pipelineSteps = [];
 
-  selectedAgentIds.forEach((aId, index) => {
+  let index = 0;
+  for (const aId of selectedAgentIds) {
     const agent = AGENTS.find(a => a.id === aId.toLowerCase());
-    if (!agent) return;
+    if (!agent) { index++; continue; }
 
     const route = ROUTER_ROUTES.find(r => r.agentId === aId.toLowerCase()) || { primaryModel: 'gemini-2.5-flash', provider: 'google' };
 
@@ -457,6 +530,21 @@ function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
     } else if (aId === 'fitri') {
       stepOutput = `[3D Design & Tokens] Setup 3-point lighting render produk, PBR materials, dan token design system untuk goal: "${userGoal}".`;
       actionLog = `Fitri_${new Date().toISOString().split('T')[0]}_orchestrated_3d_render.log`;
+    } else if (aId === 'rani') {
+      stepOutput = `[Content Analysis] Analisis baseline 10 konten terakhir, identifikasi pola pemenang, dan susun hipotesis teruji untuk goal: "${userGoal}".`;
+      actionLog = `Rani_${new Date().toISOString().split('T')[0]}_orchestrated_analysis.log`;
+    }
+
+    // Otak beneran: bila GEMINI_API_KEY ada, minta AI menulis output step ini (fallback ke template bila gagal)
+    let brainUsed = false;
+    if (BRAIN_ENABLED) {
+      try {
+        stepOutput = await generateStepWithAI(agent, userGoal, pipelineSteps);
+        actionLog = `${agent.name}_${new Date().toISOString().split('T')[0]}_orchestrated_ai_brain.log`;
+        brainUsed = true;
+      } catch (err) {
+        console.warn(`[BRAIN] AI gagal untuk ${agent.id}, pakai template:`, err.message);
+      }
     }
 
     // Push action log
@@ -477,9 +565,11 @@ function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
       provider: route.provider,
       output: stepOutput,
       status: 'completed',
+      brain: brainUsed ? 'ai' : 'template',
       latencyMs: Math.floor(Math.random() * 120) + 80
     });
-  });
+    index++;
+  }
 
   if (triggeredBy) {
     LOGS.unshift(`Orchestration_${new Date().toISOString().split('T')[0]}_${triggeredBy}.log`);
@@ -490,14 +580,19 @@ function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
     goal: userGoal,
     preset: workflowPreset || 'Custom Multi-Agent Pipeline',
     totalSteps: pipelineSteps.length,
+    brainMode: BRAIN_ENABLED ? 'ai' : 'template',
     steps: pipelineSteps,
     executedAt: new Date().toISOString()
   };
 }
 
-app.post('/api/orchestration/execute', (req, res) => {
+app.post('/api/orchestration/execute', async (req, res) => {
   const { goal, agentIds, workflowPreset } = req.body;
-  res.json({ success: true, ...runOrchestration({ goal, agentIds, workflowPreset, triggeredBy: 'manual' }) });
+  try {
+    res.json({ success: true, ...await runOrchestration({ goal, agentIds, workflowPreset, triggeredBy: 'manual' }) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Orkestrasi gagal: ' + err.message });
+  }
 });
 
 app.get('/api/social/accounts', (req, res) => {
@@ -633,6 +728,7 @@ app.get('/api/social/oauth/:id/callback', async (req, res) => {
     acc.tokenExpiresAt = tj.expires_in ? new Date(Date.now() + tj.expires_in * 1000).toISOString() : null;
     acc.connected = true;
     acc.status = 'Connected (OAuth 2.0, ' + new Date().toISOString().slice(0, 10) + ')';
+    saveSocialTokens();
     LOGS.unshift(`Social_${id}_${new Date().toISOString().split('T')[0]}_oauth_connected.log`);
     return finish(true, 'Token akses tersimpan aman di server. Akun "' + acc.name + '" sekarang terhubung beneran.');
   } catch (err) {
@@ -658,6 +754,7 @@ app.post('/api/router/keys', (req, res) => {
     created: new Date().toISOString().split('T')[0]
   };
   ROUTER_KEYS.unshift(newKey);
+  saveRouterKeys();
   res.json({ success: true, key: newKey });
 });
 
@@ -665,6 +762,7 @@ app.delete('/api/router/keys/:id', (req, res) => {
   const idx = ROUTER_KEYS.findIndex(k => k.id === req.params.id);
   if (idx !== -1) {
     ROUTER_KEYS.splice(idx, 1);
+    saveRouterKeys();
     res.json({ success: true });
   } else {
     res.status(404).json({ error: 'Key not found' });
@@ -684,6 +782,7 @@ app.put('/api/router/providers/:id', (req, res) => {
     if (models !== undefined) p.models = Array.isArray(models) ? models : models.split(',').map(m => m.trim());
     if (status !== undefined) p.status = status;
     if (priority !== undefined) p.priority = Number(priority);
+    saveState('router_providers.json', ROUTER_PROVIDERS);
     res.json({ success: true, provider: p });
   } else {
     res.status(404).json({ error: 'Provider not found' });
@@ -749,65 +848,162 @@ app.get('/v1/models', (req, res) => {
   });
 });
 
-app.post('/v1/chat/completions', (req, res) => {
+// ===== 9ROUTER: teruskan /v1/chat/completions ke provider asli (bukan mock) =====
+// Resolve provider dari nama model: cocokkan daftar models, lalu tebak dari nama.
+function resolveProvider(model) {
+  const m = String(model || '').toLowerCase();
+  for (const p of ROUTER_PROVIDERS) {
+    if (p.status !== 'active') continue;
+    if ((p.models || []).some(x => String(x).toLowerCase() === m)) return p;
+  }
+  const guess = m.includes('claude') ? 'anthropic'
+    : (m.includes('gpt') || /^o[13]/.test(m)) ? 'openai'
+    : m.includes('deepseek') ? 'deepseek'
+    : m.includes('gemini') ? 'google'
+    : (m.includes('llama') || m.includes('mixtral')) ? 'groq' : null;
+  if (guess) return ROUTER_PROVIDERS.find(p => p.provider === guess && p.status === 'active') || null;
+  return null;
+}
+
+// Normalisasi pesan OpenAI -> format contents Gemini
+function toGeminiContents(messages) {
+  const contents = [];
+  for (const msg of messages || []) {
+    if (msg.role === 'system') continue;
+    contents.push({ role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: String(msg.content || '') }] });
+  }
+  return contents;
+}
+function geminiSystem(messages) {
+  const sys = (messages || []).filter(m => m.role === 'system').map(m => m.content).join('\n');
+  return sys ? { parts: [{ text: sys }] } : undefined;
+}
+
+// Teruskan request ke provider dan kembalikan dalam format OpenAI chat.completion
+async function forwardToProvider(provider, model, body) {
+  const { messages, temperature, max_tokens } = body;
+  const base = provider.baseUrl.replace(/\/$/, '');
+
+  if (provider.provider === 'anthropic') {
+    // Anthropic memakai format /messages sendiri
+    const sys = (messages || []).filter(m => m.role === 'system').map(m => m.content).join('\n');
+    const msgs = (messages || []).filter(m => m.role !== 'system').map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') }));
+    const r = await fetch(base + '/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': provider.apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model, max_tokens: max_tokens || 1024, system: sys || undefined, messages: msgs, temperature })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw { status: r.status, message: j.error?.message || ('Anthropic HTTP ' + r.status) };
+    const text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('');
+    return { text, promptTokens: j.usage?.input_tokens || 0, completionTokens: j.usage?.output_tokens || 0, finish: j.stop_reason || 'stop' };
+  }
+
+  if (provider.provider === 'google') {
+    // Gemini memakai format :generateContent
+    const sys = geminiSystem(messages);
+    const payload = { contents: toGeminiContents(messages), generationConfig: { temperature } };
+    if (sys) payload.systemInstruction = sys;
+    const r = await fetch(`${base}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': provider.apiKey },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw { status: r.status, message: j.error?.message || ('Gemini HTTP ' + r.status) };
+    const parts = j.candidates?.[0]?.content?.parts || [];
+    const text = parts.map(p => p.text || '').join('');
+    return {
+      text,
+      promptTokens: j.usageMetadata?.promptTokenCount || 0,
+      completionTokens: j.usageMetadata?.candidatesTokenCount || 0,
+      finish: (j.candidates?.[0]?.finishReason || 'STOP').toLowerCase()
+    };
+  }
+
+  // openai / deepseek / groq: OpenAI-compatible, teruskan langsung
+  const r = await fetch(base + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    body: JSON.stringify({ model, messages, temperature, max_tokens })
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw { status: r.status, message: j.error?.message || ('Provider HTTP ' + r.status) };
+  const choice = j.choices?.[0] || {};
+  return {
+    text: choice.message?.content || '',
+    promptTokens: j.usage?.prompt_tokens || 0,
+    completionTokens: j.usage?.completion_tokens || 0,
+    finish: choice.finish_reason || 'stop'
+  };
+}
+
+app.post('/v1/chat/completions', async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace('Bearer ', '').trim();
-  
-  const { model, messages, temperature } = req.body;
+
+  const { model, messages, temperature, max_tokens } = req.body || {};
   const requestedModel = model || 'gemini-2.5-flash';
-  
-  // Validate virtual key — wajib cocok dengan salah satu key aktif (tanpa token = ditolak)
+
+  // Validasi virtual key — wajib cocok dengan salah satu key aktif (tanpa token = ditolak)
   const validKey = token ? ROUTER_KEYS.find(k => k.active && k.key === token) : null;
   if (!validKey) {
-    return res.status(401).json({ error: 'API key tidak valid — gunakan Bearer key 9Router yang aktif' });
+    return res.status(401).json({ error: 'API key tidak valid — gunakan Bearer <redacted> 9Router yang aktif' });
   }
-  
-  const promptTokens = (messages || []).reduce((acc, m) => acc + (m.content || '').length / 4, 20);
-  const completionText = `[9Router Gateway AI Response] Jawaban dari model ${requestedModel} melalui Hermes Agent Mesh. Pesan Anda telah berhasil diproses oleh 9router dengan latensi optimal.`;
-  const completionTokens = Math.round(completionText.length / 4);
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return res.status(400).json({ error: 'messages wajib diisi (array tidak kosong)' });
+  }
 
-  const logEntry = {
-    id: 'req_' + Date.now().toString().slice(-4),
-    ts: new Date().toISOString(),
-    model: requestedModel,
-    agent: '9Router Client Proxy',
-    promptTokens: Math.round(promptTokens),
-    completionTokens,
-    latencyMs: Math.floor(Math.random() * 150) + 100,
-    status: 200,
-    provider: requestedModel.includes('claude') ? 'Anthropic' : requestedModel.includes('gpt') ? 'OpenAI' : requestedModel.includes('deepseek') ? 'DeepSeek' : 'Google Gemini'
-  };
-  ROUTER_TRAFFIC_LOGS.unshift(logEntry);
-  if (ROUTER_TRAFFIC_LOGS.length > 50) ROUTER_TRAFFIC_LOGS.pop();
+  const provider = resolveProvider(requestedModel);
+  if (!provider) {
+    return res.status(400).json({ error: `Model '${requestedModel}' tidak dikenal — cek /v1/models untuk daftar model` });
+  }
+  if (!provider.apiKey) {
+    return res.status(503).json({ error: `Provider ${provider.name} belum dikonfigurasi — isi API key di dashboard tab Setup API > Providers` });
+  }
 
-  validKey.used = parseFloat((validKey.used + 0.0004).toFixed(4));
+  const t0 = Date.now();
+  try {
+    const out = await forwardToProvider(provider, requestedModel, { messages, temperature, max_tokens });
+    const latencyMs = Date.now() - t0;
+    const logEntry = {
+      id: 'req_' + Date.now().toString().slice(-4),
+      ts: new Date().toISOString(),
+      model: requestedModel,
+      agent: '9Router Client Proxy',
+      promptTokens: out.promptTokens,
+      completionTokens: out.completionTokens,
+      latencyMs,
+      status: 200,
+      provider: provider.name
+    };
+    ROUTER_TRAFFIC_LOGS.unshift(logEntry);
+    if (ROUTER_TRAFFIC_LOGS.length > 50) ROUTER_TRAFFIC_LOGS.pop();
+    validKey.used = parseFloat((validKey.used + 0.0004).toFixed(4));
 
-  res.json({
-    id: 'chatcmpl-9r-' + Math.random().toString(36).substring(2, 10),
-    object: 'chat.completion',
-    created: Math.floor(Date.now() / 1000),
-    model: requestedModel,
-    choices: [
-      {
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: completionText
-        },
-        finish_reason: 'stop'
-      }
-    ],
-    usage: {
-      prompt_tokens: Math.round(promptTokens),
-      completion_tokens: completionTokens,
-      total_tokens: Math.round(promptTokens) + completionTokens
-    },
-    _9router_meta: {
-      routed_provider: logEntry.provider,
-      latency_ms: logEntry.latencyMs,
-      key_authenticated: !!validKey
-    }
-  });
+    res.json({
+      id: 'chatcmpl-9r-' + Math.random().toString(36).substring(2, 10),
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: requestedModel,
+      choices: [{ index: 0, message: { role: 'assistant', content: out.text }, finish_reason: out.finish }],
+      usage: { prompt_tokens: out.promptTokens, completion_tokens: out.completionTokens, total_tokens: out.promptTokens + out.completionTokens },
+      _9router_meta: { routed_provider: provider.name, latency_ms: latencyMs, key_authenticated: true }
+    });
+  } catch (err) {
+    const status = err.status || 502;
+    ROUTER_TRAFFIC_LOGS.unshift({
+      id: 'req_' + Date.now().toString().slice(-4),
+      ts: new Date().toISOString(),
+      model: requestedModel,
+      agent: '9Router Client Proxy',
+      promptTokens: 0, completionTokens: 0,
+      latencyMs: Date.now() - t0,
+      status,
+      provider: provider.name
+    });
+    res.status(status).json({ error: `Provider ${provider.name} gagal: ${err.message || 'unknown error'}` });
+  }
 });
 
 // API Setup & Health Endpoints
@@ -1093,16 +1289,16 @@ function validateCronExpr(expr) {
   return true;
 }
 
-const CRON_RUN_HISTORY = []; // {scheduleId, name, startedAt, totalSteps, status, error?}
+let CRON_RUN_HISTORY = loadState('cron_history.json', null) || []; // {scheduleId, name, startedAt, totalSteps, status, error?}
 
-function executeSchedule(schedule) {
+async function executeSchedule(schedule) {
   const minuteKey = new Date().toISOString().slice(0, 16); // cegah eksekusi ganda di menit yang sama
   if (schedule._lastFiredMinute === minuteKey) return;
   schedule._lastFiredMinute = minuteKey;
 
   const startedAt = new Date().toISOString();
   try {
-    const result = runOrchestration({
+    const result = await runOrchestration({
       goal: `Jadwal otomatis: ${schedule.name}`,
       agentIds: schedule.targetAgents,
       workflowPreset: schedule.preset,
@@ -1124,6 +1320,8 @@ function executeSchedule(schedule) {
     console.error(`[CRON] schedule ${schedule.id} gagal:`, err.message);
   }
   if (CRON_RUN_HISTORY.length > 50) CRON_RUN_HISTORY.pop();
+  saveState('cron_history.json', CRON_RUN_HISTORY);
+  saveState('cron_schedules.json', CRON_SCHEDULES); // lastRun/lastStatus ikut tersimpan
 }
 
 function checkCronSchedules() {
@@ -1142,7 +1340,7 @@ function checkCronSchedules() {
   }
 }
 
-const CRON_SCHEDULES = [
+let CRON_SCHEDULES = loadState('cron_schedules.json', null) || [
   { id: 'cron_1', name: 'Daily Content Repurpose Broadcast', cronExpr: '0 9 * * *', preset: 'repurpose', targetAgents: ['maya', 'citra', 'zahra', 'dewi'], active: true, lastRun: '2026-10-06 09:00:00' },
   { id: 'cron_2', name: 'Bi-Weekly HR & Excel Compliance Audit', cronExpr: '0 0 1,15 * *', preset: 'fullstack', targetAgents: ['sari', 'siti', 'dira'], active: true, lastRun: '2026-10-01 00:00:00' }
 ];
@@ -1266,6 +1464,7 @@ app.post('/api/scheduler/cron', (req, res) => {
   };
 
   CRON_SCHEDULES.unshift(newSchedule);
+  saveState('cron_schedules.json', CRON_SCHEDULES);
   res.json({ success: true, schedule: newSchedule });
 });
 
@@ -1289,6 +1488,7 @@ app.put('/api/scheduler/cron/:id', (req, res) => {
     s.targetAgents = agents;
   }
   if (active !== undefined) s.active = Boolean(active);
+  saveState('cron_schedules.json', CRON_SCHEDULES);
   res.json({ success: true, schedule: s });
 });
 
@@ -1296,6 +1496,7 @@ app.delete('/api/scheduler/cron/:id', (req, res) => {
   const idx = CRON_SCHEDULES.findIndex(x => x.id === req.params.id);
   if (idx === -1) return res.status(404).json({ error: 'Schedule not found' });
   CRON_SCHEDULES.splice(idx, 1);
+  saveState('cron_schedules.json', CRON_SCHEDULES);
   res.json({ success: true });
 });
 
