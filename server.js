@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
@@ -18,6 +19,64 @@ const ai = new GoogleGenAI({
 
 const app = express();
 app.use(express.json());
+
+// ===== AUTH: gerbang login sebelum dashboard =====
+// Token diambil dari env DASH_TOKEN (lihat .env.example). Tanpa ini, login ditolak.
+const DASH_TOKEN = process.env.DASH_TOKEN || '';
+const sessions = new Set(); // session id aktif (in-memory, konsisten dengan state lain di file ini)
+
+function getSessionId(req) {
+  const m = (req.headers.cookie || '').match(/hermes_session=([a-f0-9]{64})/);
+  return m ? m[1] : null;
+}
+
+function requireAuth(req, res, next) {
+  // Gateway API /v1/* punya skema Bearer key sendiri (bukan cookie browser) -> dilewati di sini
+  if (req.path.startsWith('/v1/')) return next();
+  // Sesi cookie (dari halaman login) ATAU header x-token (dipakai helper api() dashboard & skrip)
+  const sid = getSessionId(req);
+  const headerToken = req.headers['x-token'];
+  if ((sid && sessions.has(sid)) || (DASH_TOKEN && headerToken === DASH_TOKEN)) return next();
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: 'Unauthorized — silakan login dulu di /login' });
+  }
+  return res.redirect('/login');
+}
+
+// --- Route publik: halaman + proses login/logout ---
+app.get('/login', (req, res) => {
+  const sid = getSessionId(req);
+  if (sid && sessions.has(sid)) return res.redirect('/');
+  res.sendFile(path.join(__dirname, 'kpi-dashboard', 'login.html'));
+});
+
+app.post('/api/auth/login', (req, res) => {
+  if (!DASH_TOKEN) {
+    return res.status(500).json({ error: 'DASH_TOKEN belum diset di server — hubungi admin' });
+  }
+  const { token } = req.body || {};
+  if (token && token === DASH_TOKEN) {
+    const sid = crypto.randomBytes(32).toString('hex');
+    sessions.add(sid);
+    res.setHeader('Set-Cookie', `hermes_session=${sid}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400`);
+    return res.json({ success: true });
+  }
+  return res.status(401).json({ error: 'Token salah — coba lagi' });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const sid = getSessionId(req);
+  if (sid) sessions.delete(sid);
+  res.setHeader('Set-Cookie', 'hermes_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0');
+  res.json({ success: true });
+});
+
+// Semua route di bawah baris ini wajib login (kecuali /v1/*)
+app.use(requireAuth);
+
+if (!DASH_TOKEN) {
+  console.warn('[AUTH] PERINGATAN: DASH_TOKEN kosong — halaman login akan menolak semua upaya masuk sampai token diset.');
+}
 
 // In-memory mock data representing the 10 Hermes Agents & their skills from /skills/*
 const AGENTS = [
@@ -229,6 +288,22 @@ const ROOM_MESSAGES = [
   { from: 'Dira', to: 'Fitri', text: 'Terima kasih Fitri, endpoint API dan halaman KPI Dashboard sudah jalan di port 3000.', ts: '2026-10-06T07:20:00Z' }
 ];
 
+// ===== Inter-Agent Mesh helpers =====
+// Cari agent berdasarkan id atau nama (case-insensitive). Dipakai untuk validasi pengirim/penerima.
+function findAgent(idOrName) {
+  if (!idOrName) return null;
+  const key = String(idOrName).trim().toLowerCase();
+  return AGENTS.find(a => a.id.toLowerCase() === key || a.name.toLowerCase() === key) || null;
+}
+
+// Tulis satu pesan ke mesh dan kembalikan objek pesannya. Maks 200 pesan (FIFO).
+function pushRoomMessage(fromName, toName, text) {
+  const msg = { from: fromName, to: toName, text, ts: new Date().toISOString() };
+  ROOM_MESSAGES.push(msg);
+  if (ROOM_MESSAGES.length > 200) ROOM_MESSAGES.splice(0, ROOM_MESSAGES.length - 200);
+  return msg;
+}
+
 const PROPOSALS = [
   { agent: 'Sari', skill: 'hr-admin', title: 'Otomatisasi peringatan H-30 kontrak PKWT', status: 'approved' },
   { agent: 'Dinda', skill: 'upwork-freelance', title: 'Template scoring kelayakan job posting Upwork', status: 'approved' },
@@ -245,16 +320,16 @@ const PROPOSALS = [
 
 // 9ROUTER API GATEWAY STATE
 const ROUTER_KEYS = [
-  { id: 'key_1', name: 'Hermes Production Key', key: 'sk-9r-hermes-prod-883921', rateLimit: 120, budget: 50.00, used: 4.82, active: true, created: '2026-10-01' },
-  { id: 'key_2', name: 'Hermes Staging & Test Key', key: 'sk-9r-hermes-stage-110293', rateLimit: 60, budget: 10.00, used: 1.15, active: true, created: '2026-10-03' }
+  { id: 'key_1', name: 'Hermes Production Key', key: '', rateLimit: 120, budget: 50.00, used: 4.82, active: true, created: '2026-10-01' },
+  { id: 'key_2', name: 'Hermes Staging & Test Key', key: '', rateLimit: 60, budget: 10.00, used: 1.15, active: true, created: '2026-10-03' }
 ];
 
 const ROUTER_PROVIDERS = [
-  { id: 'gemini', name: 'Google Gemini AI', provider: 'google', apiKey: 'AIzaSy_GEMINI_DEFAULT_KEY_MOCK', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'], status: 'active', latencyMs: 210, priority: 1 },
-  { id: 'openai', name: 'OpenAI API', provider: 'openai', apiKey: 'sk-proj-OPENAI_DEFAULT_KEY_MOCK', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'], status: 'active', latencyMs: 340, priority: 2 },
-  { id: 'anthropic', name: 'Anthropic Claude', provider: 'anthropic', apiKey: 'sk-ant-CLAUDE_DEFAULT_KEY_MOCK', baseUrl: 'https://api.anthropic.com/v1', models: ['claude-3-5-sonnet', 'claude-3-haiku'], status: 'active', latencyMs: 290, priority: 3 },
-  { id: 'deepseek', name: 'DeepSeek AI', provider: 'deepseek', apiKey: 'sk-ds-DEEPSEEK_DEFAULT_KEY_MOCK', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'], status: 'active', latencyMs: 180, priority: 4 },
-  { id: 'groq', name: 'Groq LPU Acceleration', provider: 'groq', apiKey: 'gsk_GROQ_DEFAULT_KEY_MOCK', baseUrl: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'], status: 'active', latencyMs: 85, priority: 5 }
+  { id: 'gemini', name: 'Google Gemini AI', provider: 'google', apiKey: '', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', models: ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-exp'], status: 'active', latencyMs: 210, priority: 1 },
+  { id: 'openai', name: 'OpenAI API', provider: 'openai', apiKey: '', baseUrl: 'https://api.openai.com/v1', models: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'], status: 'active', latencyMs: 340, priority: 2 },
+  { id: 'anthropic', name: 'Anthropic Claude', provider: 'anthropic', apiKey: '', baseUrl: 'https://api.anthropic.com/v1', models: ['claude-3-5-sonnet', 'claude-3-haiku'], status: 'active', latencyMs: 290, priority: 3 },
+  { id: 'deepseek', name: 'DeepSeek AI', provider: 'deepseek', apiKey: '', baseUrl: 'https://api.deepseek.com/v1', models: ['deepseek-chat', 'deepseek-reasoner'], status: 'active', latencyMs: 180, priority: 4 },
+  { id: 'groq', name: 'Groq LPU Acceleration', provider: 'groq', apiKey: '', baseUrl: 'https://api.groq.com/openai/v1', models: ['llama-3.3-70b-versatile', 'mixtral-8x7b-32768'], status: 'active', latencyMs: 85, priority: 5 }
 ];
 
 const ROUTER_ROUTES = [
@@ -278,24 +353,24 @@ const ROUTER_TRAFFIC_LOGS = [
 
 // SOCIAL MEDIA & ACCOUNT AUTH HUB STATE
 const SOCIAL_ACCOUNTS = [
-  { id: 'google', name: 'Google Account (Workspace & Auth)', platform: 'Google', handle: 'setiawanprabowo99@gmail.com', agent: 'Sari & Siti', connected: true, status: 'Connected (OAuth 2.0)', token: 'ya29.a0Axoo-GOOGLE_AUTH_TOKEN_ACTIVE', icon: '🌐' },
-  { id: 'youtube', name: 'YouTube Creator Channel', platform: 'YouTube', handle: '@HermesTechStudio', agent: 'Maya', connected: true, status: 'Connected (Studio API)', token: 'yt.token.881293', icon: '▶️' },
-  { id: 'instagram', name: 'Instagram Creator Account', platform: 'Instagram', handle: '@hermes_agent_official', agent: 'Citra', connected: true, status: 'Connected (Graph API)', token: 'ig.token.550192', icon: '📸' },
-  { id: 'tiktok', name: 'TikTok Creator Hub', platform: 'TikTok', handle: '@hermes_fyp_tech', agent: 'Zahra', connected: true, status: 'Connected (Display API)', token: 'tt.token.330291', icon: '🎵' },
-  { id: 'facebook', name: 'Facebook Page & Group', platform: 'Facebook', handle: 'Komunitas Hermes Indonesia', agent: 'Dewi', connected: true, status: 'Connected (Graph API)', token: 'fb.token.990211', icon: '👥' },
-  { id: 'upwork', name: 'Upwork Freelance Profile', platform: 'Upwork', handle: 'Setiawan Prabowo (Full-Stack)', agent: 'Dinda', connected: true, status: 'Connected (GraphQL)', token: 'up.token.110294', icon: '💼' },
-  { id: 'github', name: 'GitHub & Personal Brand', platform: 'GitHub', handle: '@sktyawan', agent: 'Rina & Dira', connected: true, status: 'Connected (REST v3)', token: 'ghp_GITHUB_TOKEN_ACTIVE', icon: '🐙' },
+  { id: 'google', name: 'Google Account (Workspace & Auth)', platform: 'Google', handle: 'setiawanprabowo99@gmail.com', agent: 'Sari & Siti', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '🌐' },
+  { id: 'youtube', name: 'YouTube Creator Channel', platform: 'YouTube', handle: '@HermesTechStudio', agent: 'Maya', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '▶️' },
+  { id: 'instagram', name: 'Instagram Creator Account', platform: 'Instagram', handle: '@hermes_agent_official', agent: 'Citra', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '📸' },
+  { id: 'tiktok', name: 'TikTok Creator Hub', platform: 'TikTok', handle: '@hermes_fyp_tech', agent: 'Zahra', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '🎵' },
+  { id: 'facebook', name: 'Facebook Page & Group', platform: 'Facebook', handle: 'Komunitas Hermes Indonesia', agent: 'Dewi', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '👥' },
+  { id: 'upwork', name: 'Upwork Freelance Profile', platform: 'Upwork', handle: 'Setiawan Prabowo (Full-Stack)', agent: 'Dinda', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '💼' },
+  { id: 'github', name: 'GitHub & Personal Brand', platform: 'GitHub', handle: '@sktyawan', agent: 'Rina & Dira', connected: false, status: 'Disconnected — hubungkan via OAuth', token: '', icon: '🐙' },
   { id: 'behance', name: 'Behance & 3D Portfolio', platform: 'Behance', handle: 'be.net/fitri3d', agent: 'Fitri', connected: false, status: 'Disconnected', token: '', icon: '🎨' }
 ];
 
 // MULTI-AGENT ORCHESTRATION ENGINE
-app.post('/api/orchestration/execute', (req, res) => {
-  const { goal, agentIds, workflowPreset } = req.body;
+// Logika inti diekstrak jadi fungsi reusable agar bisa dipanggil dari HTTP maupun cron runner.
+function runOrchestration({ goal, agentIds, workflowPreset, triggeredBy }) {
   const userGoal = goal || 'Eksekusi kolaborasi terintegrasi antar 10 Hermes Agents';
-  
+
   // Selected or active agents
-  const selectedAgentIds = Array.isArray(agentIds) && agentIds.length > 0 
-    ? agentIds 
+  const selectedAgentIds = Array.isArray(agentIds) && agentIds.length > 0
+    ? agentIds
     : ['sari', 'dinda', 'rina', 'siti', 'citra', 'maya', 'zahra', 'dewi', 'dira', 'fitri'];
 
   const pipelineSteps = [];
@@ -348,12 +423,7 @@ app.post('/api/orchestration/execute', (req, res) => {
     const targetAgentId = selectedAgentIds[(index + 1) % selectedAgentIds.length];
     const targetAgent = AGENTS.find(a => a.id === targetAgentId) || { name: 'All Agents' };
 
-    ROOM_MESSAGES.push({
-      from: agent.name,
-      to: targetAgent.name,
-      text: stepOutput,
-      ts: new Date().toISOString()
-    });
+    pushRoomMessage(agent.name, targetAgent.name, stepOutput);
 
     pipelineSteps.push({
       stepNumber: index + 1,
@@ -368,15 +438,23 @@ app.post('/api/orchestration/execute', (req, res) => {
     });
   });
 
-  res.json({
-    success: true,
+  if (triggeredBy) {
+    LOGS.unshift(`Orchestration_${new Date().toISOString().split('T')[0]}_${triggeredBy}.log`);
+  }
+
+  return {
     orchestrationId: 'orch_' + Date.now(),
     goal: userGoal,
     preset: workflowPreset || 'Custom Multi-Agent Pipeline',
     totalSteps: pipelineSteps.length,
     steps: pipelineSteps,
     executedAt: new Date().toISOString()
-  });
+  };
+}
+
+app.post('/api/orchestration/execute', (req, res) => {
+  const { goal, agentIds, workflowPreset } = req.body;
+  res.json({ success: true, ...runOrchestration({ goal, agentIds, workflowPreset, triggeredBy: 'manual' }) });
 });
 
 app.get('/api/social/accounts', (req, res) => {
@@ -386,16 +464,136 @@ app.get('/api/social/accounts', (req, res) => {
 app.put('/api/social/accounts/:id', (req, res) => {
   const { handle, connected, token } = req.body;
   const acc = SOCIAL_ACCOUNTS.find(a => a.id === req.params.id);
-  if (acc) {
-    if (handle !== undefined) acc.handle = handle;
-    if (connected !== undefined) {
-      acc.connected = Boolean(connected);
-      acc.status = acc.connected ? 'Connected (Active Token)' : 'Disconnected';
+  if (!acc) {
+    return res.status(404).json({ error: 'Social account not found' });
+  }
+  if (handle !== undefined) acc.handle = handle;
+  if (connected !== undefined) {
+    // Connect manual tanpa token dilarang — harus lewat alur OAuth agar status jujur
+    if (connected && !acc.token) {
+      return res.status(400).json({ error: 'Tidak bisa connect manual — gunakan alur OAuth: /api/social/oauth/' + acc.id + '/start' });
     }
-    if (token !== undefined) acc.token = token;
-    res.json({ success: true, account: acc });
-  } else {
-    res.status(404).json({ error: 'Social account not found' });
+    acc.connected = Boolean(connected);
+    if (!acc.connected) {
+      acc.token = '';
+      acc.refreshToken = '';
+      acc.tokenExpiresAt = null;
+    }
+    acc.status = acc.connected ? 'Connected (Active Token)' : 'Disconnected';
+  }
+  if (token !== undefined) acc.token = token;
+  res.json({ success: true, account: acc });
+});
+
+// ===== OAUTH2: koneksi akun sosial beneran (bukan toggle tampilan) =====
+// Kredensial tiap platform WAJIB dari env (skill 3.13 — tanpa pengecualian):
+//   OAUTH_REDIRECT_BASE=https://dashboard.milikmu.com
+//   OAUTH_GOOGLE_CLIENT_ID / OAUTH_GOOGLE_CLIENT_SECRET
+//   (prefix kapital per id: GOOGLE, YOUTUBE, FACEBOOK, INSTAGRAM, TIKTOK, UPWORK, GITHUB)
+// Daftarkan aplikasi OAuth di tiap platform dulu, lalu isi env di atas.
+const OAUTH_PROVIDERS = {
+  google:    { authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token', scopes: 'openid email profile' },
+  youtube:   { authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth', tokenUrl: 'https://oauth2.googleapis.com/token', scopes: 'openid email profile https://www.googleapis.com/auth/youtube.readonly' },
+  facebook:  { authorizeUrl: 'https://www.facebook.com/v18.0/dialog/oauth', tokenUrl: 'https://graph.facebook.com/v18.0/oauth/access_token', scopes: 'public_profile,email' },
+  instagram: { authorizeUrl: 'https://www.facebook.com/v18.0/dialog/oauth', tokenUrl: 'https://graph.facebook.com/v18.0/oauth/access_token', scopes: 'instagram_basic,pages_show_list' },
+  tiktok:    { authorizeUrl: 'https://www.tiktok.com/v2/auth/authorize/', tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/', scopes: 'user.info.basic' },
+  upwork:    { authorizeUrl: 'https://www.upwork.com/ab/account-security/oauth2/authorize', tokenUrl: 'https://www.upwork.com/api/auth/v1/oauth/token.php', scopes: '' },
+  github:    { authorizeUrl: 'https://github.com/login/oauth/authorize', tokenUrl: 'https://github.com/login/oauth/access_token', scopes: 'read:user' }
+  // behance: API publik dihentikan Adobe — tidak didukung
+};
+
+function oauthEnv(id) {
+  const p = OAUTH_PROVIDERS[id];
+  if (!p) return null;
+  const pre = 'OAUTH_' + id.toUpperCase();
+  const clientId = process.env[pre + '_CLIENT_ID'] || '';
+  const clientSecret = process.env[pre + '_CLIENT_SECRET'] || '';
+  const redirectBase = (process.env.OAUTH_REDIRECT_BASE || '').replace(/\/$/, '');
+  if (!clientId || !clientSecret || !redirectBase) return null;
+  return { ...p, clientId, clientSecret, redirectUri: redirectBase + '/api/social/oauth/' + id + '/callback' };
+}
+
+const OAUTH_STATES = new Map(); // state -> {id, createdAt}
+
+app.get('/api/social/oauth/:id/status', (req, res) => {
+  const acc = SOCIAL_ACCOUNTS.find(a => a.id === req.params.id);
+  if (!acc) return res.status(404).json({ error: 'Social account not found' });
+  res.json({
+    id: acc.id,
+    configured: Boolean(oauthEnv(acc.id)),
+    connected: acc.connected && Boolean(acc.token),
+    tokenExpiresAt: acc.tokenExpiresAt || null
+  });
+});
+
+app.get('/api/social/oauth/:id/start', (req, res) => {
+  const id = req.params.id;
+  const cfg = oauthEnv(id);
+  if (!cfg) {
+    return res.status(400).send(
+      `<h3>OAuth "${id}" belum dikonfigurasi</h3>` +
+      `<p>Set environment berikut lalu restart server:<br>` +
+      `<code>OAUTH_REDIRECT_BASE</code>, ` +
+      `<code>OAUTH_${id.toUpperCase()}_CLIENT_ID</code>, ` +
+      `<code>OAUTH_${id.toUpperCase()}_CLIENT_SECRET</code></p>` +
+      `<p><a href="/">Kembali ke dashboard</a></p>`
+    );
+  }
+  const state = crypto.randomBytes(16).toString('hex');
+  OAUTH_STATES.set(state, { id, createdAt: Date.now() });
+  const params = new URLSearchParams({
+    client_id: cfg.clientId,
+    redirect_uri: cfg.redirectUri,
+    response_type: 'code',
+    scope: cfg.scopes,
+    state
+  });
+  res.redirect(cfg.authorizeUrl + '?' + params.toString());
+});
+
+app.get('/api/social/oauth/:id/callback', async (req, res) => {
+  const id = req.params.id;
+  const { code, state, error, error_description } = req.query;
+  const finish = (ok, msg) => res.send(
+    `<html><body style="font-family:sans-serif;padding:40px;max-width:560px">` +
+    `<h3>${ok ? '✅' : '❌'} OAuth "${id}": ${ok ? 'terhubung' : 'gagal'}</h3><p>${msg}</p>` +
+    `<p><a href="/">Kembali ke dashboard</a> (refresh untuk melihat status terbaru)</p></body></html>`
+  );
+  if (error) return finish(false, error_description || error);
+  const saved = OAUTH_STATES.get(state);
+  OAUTH_STATES.delete(state);
+  if (!saved || saved.id !== id || Date.now() - saved.createdAt > 10 * 60 * 1000) {
+    return finish(false, 'State tidak valid atau kedaluwarsa — ulangi dari dashboard.');
+  }
+  const cfg = oauthEnv(id);
+  if (!cfg) return finish(false, 'Konfigurasi OAuth hilang dari server.');
+  try {
+    const body = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: String(code),
+      redirect_uri: cfg.redirectUri,
+      client_id: cfg.clientId,
+      client_secret: cfg.clientSecret
+    });
+    const tr = await fetch(cfg.tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+      body: body.toString()
+    });
+    const tj = await tr.json();
+    if (!tr.ok || !tj.access_token) {
+      throw new Error(tj.error_description || tj.error || ('HTTP ' + tr.status));
+    }
+    const acc = SOCIAL_ACCOUNTS.find(a => a.id === id);
+    acc.token = tj.access_token;
+    acc.refreshToken = tj.refresh_token || '';
+    acc.tokenExpiresAt = tj.expires_in ? new Date(Date.now() + tj.expires_in * 1000).toISOString() : null;
+    acc.connected = true;
+    acc.status = 'Connected (OAuth 2.0, ' + new Date().toISOString().slice(0, 10) + ')';
+    LOGS.unshift(`Social_${id}_${new Date().toISOString().split('T')[0]}_oauth_connected.log`);
+    return finish(true, 'Token akses tersimpan aman di server. Akun "' + acc.name + '" sekarang terhubung beneran.');
+  } catch (err) {
+    return finish(false, 'Gagal tukar kode otorisasi: ' + err.message);
   }
 });
 
@@ -515,8 +713,11 @@ app.post('/v1/chat/completions', (req, res) => {
   const { model, messages, temperature } = req.body;
   const requestedModel = model || 'gemini-2.5-flash';
   
-  // Validate virtual key
-  const validKey = ROUTER_KEYS.find(k => k.active && (k.key === token || !token || token.startsWith('sk-9r-')));
+  // Validate virtual key — wajib cocok dengan salah satu key aktif (tanpa token = ditolak)
+  const validKey = token ? ROUTER_KEYS.find(k => k.active && k.key === token) : null;
+  if (!validKey) {
+    return res.status(401).json({ error: 'API key tidak valid — gunakan Bearer key 9Router yang aktif' });
+  }
   
   const promptTokens = (messages || []).reduce((acc, m) => acc + (m.content || '').length / 4, 20);
   const completionText = `[9Router Gateway AI Response] Jawaban dari model ${requestedModel} melalui Hermes Agent Mesh. Pesan Anda telah berhasil diproses oleh 9router dengan latensi optimal.`;
@@ -536,9 +737,7 @@ app.post('/v1/chat/completions', (req, res) => {
   ROUTER_TRAFFIC_LOGS.unshift(logEntry);
   if (ROUTER_TRAFFIC_LOGS.length > 50) ROUTER_TRAFFIC_LOGS.pop();
 
-  if (validKey) {
-    validKey.used = parseFloat((validKey.used + 0.0004).toFixed(4));
-  }
+  validKey.used = parseFloat((validKey.used + 0.0004).toFixed(4));
 
   res.json({
     id: 'chatcmpl-9r-' + Math.random().toString(36).substring(2, 10),
@@ -585,23 +784,57 @@ app.post('/api/webhook/dispatch', (req, res) => {
     return res.status(400).json({ error: 'Missing agent or action parameters' });
   }
 
-  const logEntry = `${agent.charAt(0).toUpperCase() + agent.slice(1)}_${new Date().toISOString().split('T')[0]}_${action}.log`;
+  // Validasi: pengirim harus agent yang terdaftar
+  const sender = findAgent(agent);
+  if (!sender) {
+    return res.status(400).json({ error: `Unknown agent '${agent}' — pengirim harus salah satu dari 10 Hermes agents` });
+  }
+
+  const logEntry = `${sender.name}_${new Date().toISOString().split('T')[0]}_${action}.log`;
   LOGS.unshift(logEntry);
 
+  let roomMsg = null;
   if (payload && payload.message) {
-    ROOM_MESSAGES.push({
-      from: agent.charAt(0).toUpperCase() + agent.slice(1),
-      to: payload.to || 'All',
-      text: payload.message,
-      ts: new Date().toISOString()
-    });
+    // Validasi penerima bila disebut spesifik (selain 'All')
+    let toName = 'All';
+    if (payload.to && payload.to !== 'All') {
+      const target = findAgent(payload.to);
+      if (!target) {
+        return res.status(400).json({ error: `Unknown target agent '${payload.to}'` });
+      }
+      toName = target.name;
+    }
+    roomMsg = pushRoomMessage(sender.name, toName, String(payload.message));
   }
 
   res.json({
     success: true,
-    message: `Webhook dispatch accepted for agent ${agent}`,
-    logged: logEntry
+    message: `Webhook dispatch accepted for agent ${sender.name}`,
+    logged: logEntry,
+    roomMessage: roomMsg
   });
+});
+
+// Kirim pesan langsung ke Inter-Agent Mesh (dipakai simulasi debate dashboard)
+app.post('/api/room/message', (req, res) => {
+  const { from, to, text } = req.body || {};
+  if (!from || !text || !String(text).trim()) {
+    return res.status(400).json({ error: 'Missing from/text parameters' });
+  }
+  const sender = findAgent(from);
+  if (!sender) {
+    return res.status(400).json({ error: `Unknown agent '${from}'` });
+  }
+  let toName = 'All';
+  if (to && to !== 'All') {
+    const target = findAgent(to);
+    if (!target) {
+      return res.status(400).json({ error: `Unknown target agent '${to}'` });
+    }
+    toName = target.name;
+  }
+  const msg = pushRoomMessage(sender.name, toName, String(text).trim());
+  res.json({ success: true, message: msg });
 });
 
 app.get('/api/spec', (req, res) => {
@@ -617,7 +850,8 @@ app.get('/api/spec', (req, res) => {
       { path: '/api/agents/:id/chat', method: 'GET', description: 'Retrieve conversation history for an agent' },
       { path: '/api/agents/:id/memory', method: 'GET', description: 'Retrieve memory bank for an agent' },
       { path: '/api/skills/:skillName', method: 'GET', description: 'Download Markdown definition of a skill' },
-      { path: '/api/webhook/dispatch', method: 'POST', description: 'Dispatch webhook event to Hermes mesh' }
+      { path: '/api/webhook/dispatch', method: 'POST', description: 'Dispatch webhook event to Hermes mesh' },
+      { path: '/api/room/message', method: 'POST', description: 'Send a validated message to the inter-agent mesh' }
     ]
   });
 });
@@ -642,6 +876,110 @@ app.get('/api/proposals', (req, res) => {
 });
 
 // CRON SCHEDULER STATE
+// ===== CRON RUNNER: eksekutor jadwal beneran (bukan cuma tampilan) =====
+// Parser ekspresi cron 5 field: menit jam tanggal bulan hari.
+// Mendukung: * | */n | a-b | a-b/n | v1,v2,v3 | angka tunggal.
+function parseCronField(field, min, max, label) {
+  const values = new Set();
+  for (const part of String(field).split(',')) {
+    let step = 1;
+    let range = part.trim();
+    if (range.includes('/')) {
+      const [r, s] = range.split('/');
+      range = r.trim();
+      step = parseInt(s.trim(), 10);
+      if (!step || step < 1) throw new Error(`cron: step tidak valid di field ${label}`);
+    }
+    let lo = min, hi = max;
+    if (range === '*') {
+      // seluruh rentang
+    } else if (range.includes('-')) {
+      const [a, b] = range.split('-').map(v => Number(v.trim()));
+      if (!Number.isInteger(a) || !Number.isInteger(b) || a < min || b > max || a > b) {
+        throw new Error(`cron: rentang tidak valid '${part}' di field ${label}`);
+      }
+      lo = a; hi = b;
+    } else {
+      const v = Number(range);
+      if (!Number.isInteger(v) || v < min || v > max) {
+        throw new Error(`cron: nilai tidak valid '${part}' di field ${label} (batas ${min}-${max})`);
+      }
+      lo = hi = v;
+    }
+    for (let v = lo; v <= hi; v += step) values.add(v);
+  }
+  if (values.size === 0) throw new Error(`cron: field ${label} kosong`);
+  return values;
+}
+
+function cronMatches(expr, date) {
+  const parts = String(expr).trim().split(/\s+/);
+  if (parts.length !== 5) throw new Error('cron: format harus 5 field "menit jam tanggal bulan hari"');
+  const mi = parseCronField(parts[0], 0, 59, 'menit');
+  const hh = parseCronField(parts[1], 0, 23, 'jam');
+  const dd = parseCronField(parts[2], 1, 31, 'tanggal');
+  const mo = parseCronField(parts[3], 1, 12, 'bulan');
+  const wd = parseCronField(parts[4], 0, 7, 'hari');
+  const dow = date.getDay(); // 0 = Minggu
+  const wdMatch = wd.has(dow) || (dow === 0 && wd.has(7));
+  return mi.has(date.getMinutes()) && hh.has(date.getHours()) && dd.has(date.getDate())
+      && mo.has(date.getMonth() + 1) && wdMatch;
+}
+
+function validateCronExpr(expr) {
+  cronMatches(expr, new Date()); // lempar error bila tidak valid
+  return true;
+}
+
+const CRON_RUN_HISTORY = []; // {scheduleId, name, startedAt, totalSteps, status, error?}
+
+function executeSchedule(schedule) {
+  const minuteKey = new Date().toISOString().slice(0, 16); // cegah eksekusi ganda di menit yang sama
+  if (schedule._lastFiredMinute === minuteKey) return;
+  schedule._lastFiredMinute = minuteKey;
+
+  const startedAt = new Date().toISOString();
+  try {
+    const result = runOrchestration({
+      goal: `Jadwal otomatis: ${schedule.name}`,
+      agentIds: schedule.targetAgents,
+      workflowPreset: schedule.preset,
+      triggeredBy: `cron:${schedule.id}`
+    });
+    schedule.lastRun = startedAt;
+    schedule.lastStatus = 'completed';
+    CRON_RUN_HISTORY.unshift({
+      scheduleId: schedule.id, name: schedule.name, startedAt,
+      totalSteps: result.totalSteps, status: 'completed'
+    });
+    pushRoomMessage('Scheduler', 'All', `⏰ Cron "${schedule.name}" dieksekusi: ${result.totalSteps} langkah selesai.`);
+  } catch (err) {
+    schedule.lastStatus = 'failed';
+    CRON_RUN_HISTORY.unshift({
+      scheduleId: schedule.id, name: schedule.name, startedAt,
+      totalSteps: 0, status: 'failed', error: err.message
+    });
+    console.error(`[CRON] schedule ${schedule.id} gagal:`, err.message);
+  }
+  if (CRON_RUN_HISTORY.length > 50) CRON_RUN_HISTORY.pop();
+}
+
+function checkCronSchedules() {
+  const now = new Date();
+  for (const s of CRON_SCHEDULES) {
+    if (!s.active) continue;
+    try {
+      if (cronMatches(s.cronExpr, now)) executeSchedule(s);
+    } catch (err) {
+      // Ekspresi invalid: tandai sekali agar tidak spam log tiap 30 detik
+      if (s._cronError !== err.message) {
+        s._cronError = err.message;
+        console.error(`[CRON] jadwal ${s.id} dilewati: ${err.message}`);
+      }
+    }
+  }
+}
+
 const CRON_SCHEDULES = [
   { id: 'cron_1', name: 'Daily Content Repurpose Broadcast', cronExpr: '0 9 * * *', preset: 'repurpose', targetAgents: ['maya', 'citra', 'zahra', 'dewi'], active: true, lastRun: '2026-10-06 09:00:00' },
   { id: 'cron_2', name: 'Bi-Weekly HR & Excel Compliance Audit', cronExpr: '0 0 1,15 * *', preset: 'fullstack', targetAgents: ['sari', 'siti', 'dira'], active: true, lastRun: '2026-10-01 00:00:00' }
@@ -731,27 +1069,72 @@ app.get('/api/export/report', (req, res) => {
 
 // CRON SCHEDULER ENDPOINTS
 app.get('/api/scheduler/cron', (req, res) => {
-  res.json({ schedules: CRON_SCHEDULES });
+  res.json({
+    schedules: CRON_SCHEDULES.map(({ _lastFiredMinute, _cronError, ...s }) => s),
+    history: CRON_RUN_HISTORY
+  });
 });
 
 app.post('/api/scheduler/cron', (req, res) => {
-  const { name, cronExpr, preset } = req.body;
+  const { name, cronExpr, preset, targetAgents, active } = req.body;
   if (!name || !cronExpr) {
     return res.status(400).json({ error: 'Name and Cron Expression are required' });
+  }
+  try {
+    validateCronExpr(cronExpr);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  const agents = Array.isArray(targetAgents) && targetAgents.length > 0
+    ? targetAgents.filter(id => findAgent(id)).map(id => findAgent(id).id)
+    : ['maya', 'citra', 'dira'];
+  if (agents.length === 0) {
+    return res.status(400).json({ error: 'targetAgents tidak berisi agent yang dikenal' });
   }
 
   const newSchedule = {
     id: 'cron_' + Date.now(),
-    name: name.trim(),
-    cronExpr: cronExpr.trim(),
+    name: String(name).trim().slice(0, 80),
+    cronExpr: String(cronExpr).trim(),
     preset: preset || 'all',
-    targetAgents: ['maya', 'citra', 'dira'],
-    active: true,
-    lastRun: 'Pending First Run'
+    targetAgents: agents,
+    active: active !== false,
+    lastRun: 'Pending First Run',
+    lastStatus: null
   };
 
   CRON_SCHEDULES.unshift(newSchedule);
   res.json({ success: true, schedule: newSchedule });
+});
+
+app.put('/api/scheduler/cron/:id', (req, res) => {
+  const s = CRON_SCHEDULES.find(x => x.id === req.params.id);
+  if (!s) return res.status(404).json({ error: 'Schedule not found' });
+  const { name, cronExpr, preset, targetAgents, active } = req.body;
+  if (cronExpr !== undefined) {
+    try { validateCronExpr(cronExpr); } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+    s.cronExpr = String(cronExpr).trim();
+    s._cronError = undefined;
+  }
+  if (name !== undefined) s.name = String(name).trim().slice(0, 80);
+  if (preset !== undefined) s.preset = preset;
+  if (targetAgents !== undefined) {
+    const agents = (Array.isArray(targetAgents) ? targetAgents : [])
+      .filter(id => findAgent(id)).map(id => findAgent(id).id);
+    if (agents.length === 0) return res.status(400).json({ error: 'targetAgents tidak berisi agent yang dikenal' });
+    s.targetAgents = agents;
+  }
+  if (active !== undefined) s.active = Boolean(active);
+  res.json({ success: true, schedule: s });
+});
+
+app.delete('/api/scheduler/cron/:id', (req, res) => {
+  const idx = CRON_SCHEDULES.findIndex(x => x.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Schedule not found' });
+  CRON_SCHEDULES.splice(idx, 1);
+  res.json({ success: true });
 });
 
 // ANALYTICS & CHARTS DATA ENDPOINT
@@ -819,7 +1202,10 @@ app.get('/kpi.html', (req, res) => {
   res.sendFile(path.join(dashboardDir, 'kpi.html'));
 });
 
-const PORT = 3000;
+// Cron runner aktif: cek tiap 30 detik (dievaluasi per menit)
+setInterval(checkCronSchedules, 30000);
+
+const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`KPI Dashboard server running on http://0.0.0.0:${PORT}`);
 });

@@ -1549,8 +1549,8 @@
       }
     }
 
-    // TRIGGER AN INTERACTIVE CONTEXT DEBATE SIMULATION
-    function simulateIntraAgentChat() {
+    // TRIGGER AN INTERACTIVE CONTEXT DEBATE SIMULATION (tersimpan ke server via /api/room/message)
+    async function simulateIntraAgentChat() {
       // Pick a random predefined debate context conversation
       const idx = Math.floor(Math.random() * CONTEXT_DEBATES.length);
       const debate = CONTEXT_DEBATES[idx];
@@ -1561,27 +1561,25 @@
       const displayNameFrom = fromAgent ? fromAgent.name : debate.from;
       const displayNameTo = toAgent ? toAgent.name : debate.to;
 
-      // Add to global ROOM stream
-      ROOM.push({
-        from: displayNameFrom,
-        to: displayNameTo,
-        text: debate.text,
-        ts: new Date().toISOString()
-      });
-
-      // Also create a dynamic log
-      const newLogName = `${debate.from}_2026-10-06_simulated_debate_context.log`;
-      LOGS.unshift(newLogName);
-
-      // Re-render components
-      renderGlobalStats();
-      renderLogsAndMesh();
-
-      showNotification(`⚡ Dialog ${displayNameFrom} ➔ ${displayNameTo} tersambung ke mesh!`, 'success');
+      try {
+        const res = await fetch('/api/room/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: debate.from, to: debate.to, text: debate.text })
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || ('HTTP ' + res.status));
+        }
+        await refreshMesh();
+        showNotification(`⚡ Dialog ${displayNameFrom} ➔ ${displayNameTo} tersambung ke mesh!`, 'success');
+      } catch (err) {
+        showNotification('Gagal kirim ke mesh: ' + err.message, 'error');
+      }
     }
 
-    // MANUAL USER TRIGGER TO SEND DIALOGUE TO MESH
-    function triggerCustomDebate() {
+    // MANUAL USER TRIGGER TO SEND DIALOGUE TO MESH (tersimpan ke server via /api/room/message)
+    async function triggerCustomDebate() {
       const fromId = document.getElementById('sim-from').value;
       const toId = document.getElementById('sim-to').value;
       
@@ -1603,17 +1601,21 @@
         msgText = matched.text;
       }
 
-      ROOM.push({
-        from: fromAgent.name,
-        to: toAgent.name,
-        text: msgText,
-        ts: new Date().toISOString()
-      });
-
-      LOGS.unshift(`${fromOrig}_2026-10-06_manual_mesh_sync.log`);
-
-      renderGlobalStats();
-      renderLogsAndMesh();
+      try {
+        const res = await fetch('/api/room/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: fromId, to: toId, text: msgText })
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(() => ({}));
+          throw new Error(j.error || ('HTTP ' + res.status));
+        }
+        await refreshMesh();
+        showNotification(`⚡ Dialog ${fromAgent.name} ➔ ${toAgent.name} tersambung ke mesh!`, 'success');
+      } catch (err) {
+        showNotification('Gagal kirim ke mesh: ' + err.message, 'error');
+      }
     }
 
     // EDIT PROFILE MODAL ACTIONS
@@ -2064,19 +2066,38 @@
     }
 
     async function toggleConnectSocial(id, currentConnected) {
-      try {
-        const res = await fetch('/api/social/accounts/' + id, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ connected: !currentConnected })
-        });
-        if (res.ok) {
-          const actionText = !currentConnected ? 'dihubungkan' : 'พutusan koneksi';
-          showNotification(`🔐 Akun ${id} berhasil ${actionText}!`, 'success');
-          loadSocialAccounts();
+      // Putus koneksi: hapus token di server
+      if (currentConnected) {
+        try {
+          const res = await fetch('/api/social/accounts/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ connected: false })
+          });
+          if (res.ok) {
+            showNotification(`🔐 Akun ${id} diputus koneksinya!`, 'success');
+            loadSocialAccounts();
+          }
+        } catch (err) {
+          alert('Gagal update status sosial: ' + err.message);
         }
+        return;
+      }
+      // Hubungkan via OAuth beneran — cek dulu konfigurasinya
+      try {
+        const st = await api('social/oauth/' + id + '/status');
+        if (!st.configured) {
+          alert(
+            `OAuth "${id}" belum dikonfigurasi di server.\n\n` +
+            `Set environment berikut lalu restart server:\n` +
+            `OAUTH_REDIRECT_BASE, OAUTH_${id.toUpperCase()}_CLIENT_ID, OAUTH_${id.toUpperCase()}_CLIENT_SECRET`
+          );
+          return;
+        }
+        window.open('/api/social/oauth/' + id + '/start', '_blank', 'width=560,height=700');
+        showNotification('🔐 Selesaikan login di tab baru, lalu klik "Sync Status Account".', 'info');
       } catch (err) {
-        alert('Gagal update status sosial: ' + err.message);
+        alert('Gagal cek status OAuth: ' + err.message);
       }
     }
 
@@ -2239,25 +2260,65 @@
       try {
         const res = await api('scheduler/cron');
         const schedules = res.schedules || [];
+        const history = res.history || [];
         container.innerHTML = '';
 
         schedules.forEach(s => {
           const div = document.createElement('div');
           div.className = 'p-2 rounded bg-obsidian border border-slate-800/80 flex items-center justify-between gap-2';
+          const lastRun = s.lastRun && s.lastRun !== 'Pending First Run'
+            ? new Date(s.lastRun).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+            : 'belum pernah';
           div.innerHTML = `
-            <div class="truncate">
-              <span class="text-slate-200 font-bold block truncate">${s.name}</span>
-              <span class="text-cyan-400 font-mono text-[9px]">${s.cronExpr} (Preset: ${s.preset})</span>
+            <div class="truncate min-w-0">
+              <span class="text-slate-200 font-bold block truncate">${escapeHtml(s.name)}</span>
+              <span class="text-cyan-400 font-mono text-[9px]">${escapeHtml(s.cronExpr)} (${escapeHtml(s.preset)}) · terakhir: ${lastRun}</span>
             </div>
-            <span class="px-1.5 py-0.5 text-[8px] font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded shrink-0">
-              ACTIVE
-            </span>
+            <div class="flex items-center gap-1 shrink-0">
+              <button onclick="toggleCronSchedule('${s.id}', ${!s.active})" title="${s.active ? 'Nonaktifkan' : 'Aktifkan'}" class="px-1.5 py-0.5 text-[8px] font-mono ${s.active ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' : 'text-slate-500 bg-slate-900 border-slate-800'} border rounded">${s.active ? 'ACTIVE' : 'OFF'}</button>
+              <button onclick="deleteCronSchedule('${s.id}')" title="Hapus jadwal" class="px-1.5 py-0.5 text-[8px] font-mono text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded">✕</button>
+            </div>
           `;
           container.appendChild(div);
         });
+
+        if (history.length > 0) {
+          const hdiv = document.createElement('div');
+          hdiv.className = 'pt-1 text-[9px] font-mono text-slate-500';
+          hdiv.innerHTML = '<div class="uppercase tracking-wider text-slate-600 mb-1">Riwayat eksekusi</div>' +
+            history.slice(0, 5).map(h => {
+              const t = new Date(h.startedAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+              const ok = h.status === 'completed';
+              return `<div class="${ok ? 'text-slate-400' : 'text-rose-400'} truncate">${ok ? '✓' : '✗'} ${escapeHtml(h.name)} · ${t} · ${h.totalSteps} langkah</div>`;
+            }).join('');
+          container.appendChild(hdiv);
+        }
       } catch (e) {
         console.error('Failed loading cron schedules:', e);
       }
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    async function toggleCronSchedule(id, active) {
+      try {
+        const res = await fetch('/api/scheduler/cron/' + id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ active })
+        });
+        if (res.ok) { loadCronSchedules(); }
+      } catch (e) { alert('Gagal update jadwal: ' + e.message); }
+    }
+
+    async function deleteCronSchedule(id) {
+      if (!confirm('Hapus jadwal ini?')) return;
+      try {
+        const res = await fetch('/api/scheduler/cron/' + id, { method: 'DELETE' });
+        if (res.ok) { loadCronSchedules(); showNotification('⏰ Jadwal dihapus.', 'success'); }
+      } catch (e) { alert('Gagal hapus jadwal: ' + e.message); }
     }
 
     async function addCronSchedule() {
@@ -2274,9 +2335,11 @@
           body: JSON.stringify({ name: name.trim(), cronExpr: cronExpr.trim(), preset: 'all' })
         });
         const data = await res.json();
-        if (data.success) {
+        if (res.ok && data.success) {
           showNotification(`⏰ Schedule Cron "${data.schedule.name}" ditambahkan!`, 'success');
           loadCronSchedules();
+        } else {
+          alert('Gagal menambah schedule: ' + (data.error || ('HTTP ' + res.status)));
         }
       } catch (err) {
         alert('Gagal menambah schedule: ' + err.message);
@@ -2299,8 +2362,35 @@
       }, 3000);
     }
 
+    // REFRESH INTER-AGENT MESH DARI SERVER (dipakai polling + setelah kirim pesan)
+    // Me-render ulang hanya kalau ada pesan baru — posisi scroll tidak terganggu
+    async function refreshMesh() {
+      try {
+        const roomRes = await api('room').then(r => r.room || []);
+        const lastTs = ROOM.length ? ROOM[ROOM.length - 1].ts : null;
+        const newLastTs = roomRes.length ? roomRes[roomRes.length - 1].ts : null;
+        if (roomRes.length === ROOM.length && lastTs === newLastTs) return; // tidak ada yang baru
+        ROOM = roomRes;
+        LOGS = await api('logs').then(r => r.logs || []);
+        renderGlobalStats();
+        renderLogsAndMesh();
+      } catch (e) {
+        // Diam — polling berikutnya mencoba lagi (mis. sesi habis akan redirect via 401 di aksi berikut)
+      }
+    }
+
     // BOOTSTRAP APP ON LOAD
     load();
+    // Polling mesh antar-agent tiap 5 detik biar "live" beneran
+    setInterval(refreshMesh, 5000);
+  </script>
+  <!-- Tombol logout (auth dashboard) -->
+  <button id="hermes-logout" title="Keluar" style="position:fixed;bottom:18px;right:18px;z-index:9999;padding:10px 16px;border-radius:10px;border:1px solid #33415e;background:rgba(17,26,47,.95);color:#e8edf7;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.5)">Keluar</button>
+  <script>
+    document.getElementById('hermes-logout').addEventListener('click', async () => {
+      try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+      location.href = '/login';
+    });
   </script>
 </body>
 </html>
